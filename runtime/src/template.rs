@@ -1,15 +1,15 @@
-/// A runtime module template with necessary imports
+#![cfg_attr(not(feature = "std"), no_std)]
 
-/// Feel free to remove or edit this file as needed.
-/// If you change the name of this file, make sure to update its references in runtime/src/lib.rs
-/// If you remove this file, you can remove those references
-
-
-/// For more guidance on Substrate modules, see the example module
-/// https://github.com/paritytech/substrate/blob/master/srml/example/src/lib.rs
-
-use support::{decl_module, decl_storage, decl_event, StorageValue, dispatch::Result};
+use rstd::prelude::*;
+use rstd::result;
+use parity_codec::{Encode, Decode};
+use support::{StorageValue, StorageMap, Parameter, Dispatchable, IsSubType, EnumerableStorageMap};
+use support::{decl_module, decl_storage, decl_event, ensure};
+use support::dispatch::Result;
 use system::ensure_signed;
+
+
+pub type DelegatedPeriods = i8;
 
 /// The module's configuration trait.
 pub trait Trait: system::Trait {
@@ -26,6 +26,11 @@ decl_storage! {
 		// Here we are declaring a StorageValue, `Something` as a Option<u32>
 		// `get(something)` is the default getter which returns either the stored `u32` or `None` if nothing stored
 		Something get(something): Option<u32>;
+
+		/// Get the account (and lock periods) to which another account is delegating vote.
+		pub Delegations get(delegations): linked_map T::AccountId => (T::AccountId, DelegatedPeriods);
+		// The delay before enactment for all public referenda.
+		pub PublicDelay get(public_delay) config(): T::BlockNumber;
 	}
 }
 
@@ -51,6 +56,21 @@ decl_module! {
 			Self::deposit_event(RawEvent::SomethingStored(something, who));
 			Ok(())
 		}
+
+		pub fn add_delegate(origin, to: T::AccountId, delegate_periods: DelegatedPeriods) {
+			let who = ensure_signed(origin)?;
+			<Delegations<T>>::insert(who.clone(), (to.clone(), delegate_periods.clone()));
+			Self::deposit_event(RawEvent::AddedDelegated(who, to));
+		}
+
+		pub fn revoke_delegate(origin) {
+			let who = ensure_signed(origin)?;
+			ensure!(<Delegations<T>>::exists(&who), "not delegated");
+			let d = <Delegations<T>>::take(&who);
+			let delegate_period = Self::public_delay();
+			let now = <system::Module<T>>::block_number();
+			Self::deposit_event(RawEvent::RevokedDelegate(who));
+		}
 	}
 }
 
@@ -60,6 +80,9 @@ decl_event!(
 		// Event `Something` is declared with a parameter of the type `u32` and `AccountId`
 		// To emit this event, we call the deposit funtion, from our runtime funtions
 		SomethingStored(u32, AccountId),
+		AddedDelegated(AccountId, AccountId),
+		RevokedDelegate(AccountId),
+
 	}
 );
 
