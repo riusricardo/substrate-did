@@ -1,146 +1,81 @@
-#![cfg_attr(not(feature = "std"), no_std)]
-
 use rstd::prelude::*;
-use rstd::result;
 use parity_codec::{Encode, Decode};
-use support::{StorageValue, StorageMap, Parameter, Dispatchable, IsSubType, EnumerableStorageMap};
-use support::{decl_module, decl_storage, decl_event, ensure};
-use support::dispatch::Result;
-use system::ensure_signed;
+use support::{dispatch::Result, Parameter, StorageMap, decl_storage, decl_module, decl_event, ensure};
+use runtime_primitives::traits::{As, Hash, Zero};
+use system::{self, ensure_signed};
 
-
-pub type DelegatedPeriods = i8;
-
-/// The module's configuration trait.
 pub trait Trait: system::Trait {
-	// TODO: Add other types and constants required configure this module.
-
-	/// The overarching event type.
-	type Event: From<Event<Self>> + Into<<Self as system::Trait>::Event>;
+    type Event: From<Event<Self>> + Into<<Self as system::Trait>::Event>;
 }
 
-/// This module's storage items.
 decl_storage! {
 	trait Store for Module<T: Trait> as TemplateModule {
-		// Just a dummy storage item. 
-		// Here we are declaring a StorageValue, `Something` as a Option<u32>
-		// `get(something)` is the default getter which returns either the stored `u32` or `None` if nothing stored
-		Something get(something): Option<u32>;
-
-		/// Get the account (and lock periods) to which another account is delegating vote.
-		pub Delegations get(delegations): linked_map T::AccountId => (T::AccountId, DelegatedPeriods);
-		// The delay before enactment for all public referenda.
-		pub PublicDelay get(public_delay) config(): T::BlockNumber;
+		pub Delegates get(delegate_of): map (T::AccountId, Vec<u8>, T::AccountId) => T::BlockNumber;
+		pub Owners get(owner_of): map T::AccountId => Option<T::AccountId>;
+		pub Changed get(changed_on): map T::AccountId => T::BlockNumber;
+		pub Nonce get(nonce_of): map T::AccountId => u64;
 	}
 }
 
 decl_module! {
-	/// The module declaration.
 	pub struct Module<T: Trait> for enum Call where origin: T::Origin {
-		// Initializing events
-		// this is needed only if you are using events in your module
+		// initialize the default event for this module
 		fn deposit_event<T>() = default;
 
-		// Just a dummy entry point.
-		// function that can be called by the external world as an extrinsics call
-		// takes a parameter of the type `AccountId`, stores it and emits an event
-		pub fn do_something(origin, something: u32) -> Result {
-			// TODO: You only need this if you want to check it was signed.
+		// /* Cannot return AccountId */
+		// pub fn identity_owner(identity: T::AccountId) => T::AccountId {
+		// 	let owner = Self::owner_of(identity);
+		// 	if (<Owners<T>>::exists(&identity)) {
+		// 		return owner
+		// 	} 
+		// 	return identity
+		// } 
+
+		pub fn add_delegate(origin, to: T::AccountId, valid_to: T::BlockNumber, delegate_type: Vec<u8>)  {
 			let who = ensure_signed(origin)?;
-
-			// TODO: Code to execute when something calls this.
-			// For example: the following line stores the passed in u32 in the storage
-			<Something<T>>::put(something);
-
-			// here we are raising the Something event
-			Self::deposit_event(RawEvent::SomethingStored(something, who));
-			Ok(())
-		}
-
-		pub fn add_delegate(origin, to: T::AccountId, delegate_periods: DelegatedPeriods) {
-			let who = ensure_signed(origin)?;
-			<Delegations<T>>::insert(who.clone(), (to.clone(), delegate_periods.clone()));
-			Self::deposit_event(RawEvent::AddedDelegated(who, to));
-		}
-
-		pub fn revoke_delegate(origin) {
-			let who = ensure_signed(origin)?;
-			ensure!(<Delegations<T>>::exists(&who), "not delegated");
-			let d = <Delegations<T>>::take(&who);
-			let delegate_period = Self::public_delay();
+			ensure!(delegate_type.len() <= 64, "delegate type cannot exceed 64 bytes");
 			let now = <system::Module<T>>::block_number();
-			Self::deposit_event(RawEvent::RevokedDelegate(who));
+			let validity = now + valid_to.clone();
+			<Delegates<T>>::insert((who.clone(), delegate_type.clone(), to.clone()), validity);
+			Self::deposit_event(RawEvent::DIDDelegateChanged(who, delegate_type, to, validity, valid_to));
 		}
+
+		pub fn revoke_delegate(origin, to: T::AccountId, delegate_type: Vec<u8>) {
+			let who = ensure_signed(origin)?;
+			ensure!(Self::_is_owner(who.clone()), "You do not own this DID");
+			ensure!(delegate_type.len() <= 64, "delegate type cannot exceed 64 bytes");
+			let now = <system::Module<T>>::block_number();
+			<Delegates<T>>::insert((who.clone(), delegate_type.clone(), to.clone()), now.clone());
+			<Changed<T>>::insert(who.clone(), now);
+			Self::deposit_event(RawEvent::RevokedDelegate(who, delegate_type, to));
+		} 
 	}
 }
 
 decl_event!(
-	pub enum Event<T> where AccountId = <T as system::Trait>::AccountId {
-		// Just a dummy event.
-		// Event `Something` is declared with a parameter of the type `u32` and `AccountId`
-		// To emit this event, we call the deposit funtion, from our runtime funtions
-		SomethingStored(u32, AccountId),
-		AddedDelegated(AccountId, AccountId),
-		RevokedDelegate(AccountId),
-
+    pub enum Event<T>
+    where
+        <T as system::Trait>::AccountId,
+        <T as system::Trait>::BlockNumber,
+		//<T as system::Trait>::Hash
+    {
+		RevokedDelegate(AccountId, Vec<u8>, AccountId),
+		DIDOwnerChanged(AccountId,AccountId,BlockNumber),
+		DIDDelegateChanged(AccountId,Vec<u8>,AccountId,BlockNumber,BlockNumber),
 	}
 );
 
-/// tests for this module
-#[cfg(test)]
-mod tests {
-	use super::*;
+impl<T: Trait> Module<T> {
 
-	use runtime_io::with_externalities;
-	use primitives::{H256, Blake2Hasher};
-	use support::{impl_outer_origin, assert_ok};
-	use runtime_primitives::{
-		BuildStorage,
-		traits::{BlakeTwo256, IdentityLookup},
-		testing::{Digest, DigestItem, Header}
-	};
-
-	impl_outer_origin! {
-		pub enum Origin for Test {}
-	}
-
-	// For testing the module, we construct most of a mock runtime. This means
-	// first constructing a configuration type (`Test`) which `impl`s each of the
-	// configuration traits of modules we want to use.
-	#[derive(Clone, Eq, PartialEq)]
-	pub struct Test;
-	impl system::Trait for Test {
-		type Origin = Origin;
-		type Index = u64;
-		type BlockNumber = u64;
-		type Hash = H256;
-		type Hashing = BlakeTwo256;
-		type Digest = Digest;
-		type AccountId = u64;
-		type Lookup = IdentityLookup<Self::AccountId>;
-		type Header = Header;
-		type Event = ();
-		type Log = DigestItem;
-	}
-	impl Trait for Test {
-		type Event = ();
-	}
-	type TemplateModule = Module<Test>;
-
-	// This function basically just builds a genesis storage key/value store according to
-	// our desired mockup.
-	fn new_test_ext() -> runtime_io::TestExternalities<Blake2Hasher> {
-		system::GenesisConfig::<Test>::default().build_storage().unwrap().0.into()
-	}
-
-	#[test]
-	fn it_works_for_default_value() {
-		with_externalities(&mut new_test_ext(), || {
-			// Just a dummy test for the dummy funtion `do_something`
-			// calling the `do_something` function with a value 42
-			assert_ok!(TemplateModule::do_something(Origin::signed(1), 42));
-			// asserting that the stored value is equal to what we stored
-			assert_eq!(TemplateModule::something(), Some(42));
-		});
+	fn _is_owner(identity: T::AccountId) -> bool {
+		let mut approved_as_owner = false;
+		let owner = match Self::owner_of(&identity) {
+			Some(id) => id,
+			None => identity.clone(),
+		};
+		if owner == identity {
+			approved_as_owner = true;
+		}
+		return approved_as_owner
 	}
 }
