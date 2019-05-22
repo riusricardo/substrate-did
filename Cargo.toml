@@ -14,7 +14,6 @@ version = '1.0.0'
 [dependencies]
 error-chain = '0.12'
 futures = '0.1'
-ctrlc = { version = '3.0', features = ['termination'] }
 log = '0.4'
 tokio = '0.1'
 exit-future = '0.1'
@@ -32,6 +31,10 @@ rev = 'dec7af1cf40ceb7a57537e85af27dc9e18ff2fd5'
 git = 'https://github.com/paritytech/substrate.git'
 package = 'substrate-consensus-aura'
 rev = 'dec7af1cf40ceb7a57537e85af27dc9e18ff2fd5'
+
+[dependencies.ctrlc]
+features = ['termination']
+version = '3.0'
 
 [dependencies.inherents]
 git = 'https://github.com/paritytech/substrate.git'
