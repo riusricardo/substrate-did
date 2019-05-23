@@ -1,13 +1,16 @@
-use parity_codec::{Decode, Encode};
-use rstd::prelude::*;
-use runtime_primitives::traits::{As, Hash, Zero};
-use runtime_primitives::transaction_validity::TransactionValidity;
-use runtime_primitives::{create_runtime_str, generic, ApplyResult};
-use support::{
-    decl_event, decl_module, decl_storage, dispatch::Result, ensure, Parameter, StorageMap,
-};
+use support::{decl_event, decl_module, decl_storage, ensure, dispatch::Result, StorageMap};
+use parity_codec::{Encode, Decode};
 use system::{self, ensure_signed};
-use timestamp::Call as TimestampCall;
+use runtime_io::print;
+use rstd::prelude::*;
+
+#[derive(Encode, Decode, Default, Clone, PartialEq)]
+#[cfg_attr(feature = "std", derive(Debug))]
+pub struct Attribute<Moment> {
+    id_type: [u8; 32],
+    value: Vec<u8>,
+    modified: Moment,
+}
 
 pub trait Trait: system::Trait + timestamp::Trait {
     type Event: From<Event<Self>> + Into<<Self as system::Trait>::Event>;
@@ -15,10 +18,12 @@ pub trait Trait: system::Trait + timestamp::Trait {
 
 decl_storage! {
     trait Store for Module<T: Trait> as DID {
-        pub Delegates get(delegate_of): map (T::AccountId, Vec<u8>, T::AccountId) => Option<T::Moment>;
-        pub Owners get(owner_of): map T::AccountId => Option<T::AccountId>;
-        pub Changed get(changed_on): map T::AccountId => T::BlockNumber;
-        pub Nonce get(nonce_of): map T::AccountId => u64;
+        pub DelegateOf get(delegate_of): map (T::AccountId, Vec<u8>, T::AccountId) => Option<T::Moment>;
+        pub AttributeOf get(attribute_of): map T::AccountId => Attribute<T::Moment>;
+        pub OwnerOf get(owner_of): map T::AccountId => Option<T::AccountId>;
+        pub ChangedOn get(changed_on): map T::AccountId => T::BlockNumber;
+        pub NonceOf get(nonce_of): map T::AccountId => u64;
+        pub AccountNonce get(account_nonce): map T::AccountId => T::Index;
     }
 }
 
@@ -27,14 +32,14 @@ decl_module! {
         // initialize the default event for this module
         fn deposit_event<T>() = default;
 
-        pub fn change_owner(origin, identity: T::AccountId, actor: T::AccountId, new_owner: T::AccountId) {
+        pub fn change_owner(origin, identity: T::AccountId, actual_owner: T::AccountId, new_owner: T::AccountId) {
                 let who = ensure_signed(origin)?;
-                ensure!(who == actor, "invalid actor");
-                ensure!(Self::_is_owner(identity.clone(), actor.clone()), "you do not own this DID");
+                ensure!(who == actual_owner, "invalid owner");
+                ensure!(Self::_is_owner(identity.clone(), actual_owner.clone()), "you do not own this DID");
                 let now_block = <system::Module<T>>::block_number();
-                <Owners<T>>::insert(&identity, &new_owner);
-                <Changed<T>>::insert(&identity, &now_block);
-                Self::deposit_event(RawEvent::DIDOwnerChanged(identity, actor, now_block));
+                <OwnerOf<T>>::insert(&identity, &new_owner);
+                <ChangedOn<T>>::insert(&identity, &now_block);
+                Self::deposit_event(RawEvent::DIDOwnerChanged(identity, actual_owner, now_block));
         }
 
         pub fn add_delegate(origin, identity: T::AccountId, delegate: T::AccountId, delegate_type: Vec<u8>, valid_for: T::Moment)  {
@@ -43,7 +48,7 @@ decl_module! {
                 ensure!(Self::_is_owner(identity.clone(), who.clone()), "you do not own this DID");
                 let now_time = <timestamp::Module<T>>::now();
                 let validity = now_time + valid_for.clone();
-                <Delegates<T>>::insert((identity.clone(), delegate_type.clone(), delegate.clone()), validity.clone());
+                <DelegateOf<T>>::insert((identity.clone(), delegate_type.clone(), delegate.clone()), validity.clone());
                 Self::deposit_event(RawEvent::DIDDelegateChanged(identity, delegate_type, delegate, validity, valid_for));
         }
 
@@ -54,14 +59,15 @@ decl_module! {
                 ensure!(Self::_is_valid_delegate(identity.clone(), delegate_type.clone(), delegate.clone()), "invalid delegate");
                 let now_time = <timestamp::Module<T>>::now();
                 let now_block = <system::Module<T>>::block_number();
-                <Delegates<T>>::insert((identity.clone(), delegate_type.clone(), delegate.clone()), now_time.clone());
-                <Changed<T>>::insert(&identity, now_block);
+                <DelegateOf<T>>::insert((identity.clone(), delegate_type.clone(), delegate.clone()), now_time.clone());
+                <ChangedOn<T>>::insert(&identity, now_block);
                 Self::deposit_event(RawEvent::RevokedDelegate(identity, delegate_type, delegate));
         }
 
-        pub fn valid_delegate(identity: T::AccountId, delegate_type: Vec<u8>, delegate: T::AccountId) -> Result {
+        pub fn valid_delegate(origin, identity: T::AccountId, delegate_type: Vec<u8>, delegate: T::AccountId) -> Result {
                 ensure!(delegate_type.len() <= 64, "delegate type cannot exceed 64 bytes");
                 ensure!(Self::_is_valid_delegate(identity.clone(), delegate_type.clone(), delegate.clone()),"Invalid delegate");
+                Self::deposit_event(RawEvent::DIDValidDelegate(identity, delegate_type, delegate));
                 Ok(())
         }
     }
@@ -78,7 +84,8 @@ decl_event!(
     RevokedDelegate(AccountId, Vec<u8>, AccountId),
     DIDOwnerChanged(AccountId, AccountId, BlockNumber),
     DIDDelegateChanged(AccountId, Vec<u8>, AccountId, Moment, Moment),
-    DIDValidDelegate(AccountId, Vec<u8>, AccountId, Moment, Moment),
+    DIDValidDelegate(AccountId, Vec<u8>, AccountId),
+    DIDAttributeChanged(AccountId,Vec<u8>,Vec<u8>,Moment),
   }
 );
 
@@ -92,11 +99,12 @@ impl<T: Trait> Module<T> {
         owner
     }
 
-    fn _is_owner(identity: T::AccountId, actor: T::AccountId) -> bool {
+    fn _is_owner(identity: T::AccountId, actual_owner: T::AccountId) -> bool {
         let owner = Self::_identity_owner(&identity);
-        let approved_as_owner = match owner {
-            actor => true,
-            _ => false
+        let approved_as_owner = if owner == actual_owner {
+            true
+        } else {
+            false
         };
         approved_as_owner
     }
