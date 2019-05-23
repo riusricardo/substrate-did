@@ -1,15 +1,16 @@
 use support::{decl_event, decl_module, decl_storage, ensure, dispatch::Result, StorageMap};
 use parity_codec::{Encode, Decode};
 use system::{self, ensure_signed};
-use runtime_io::print;
+use runtime_primitives::traits::{One, Hash};
 use rstd::prelude::*;
 
 #[derive(Encode, Decode, Default, Clone, PartialEq)]
 #[cfg_attr(feature = "std", derive(Debug))]
-pub struct Attribute<Moment> {
+pub struct Attribute<Moment, Index> {
     id_type: [u8; 32],
     value: Vec<u8>,
-    modified: Moment,
+    validity: Moment,
+    nonce: Index,
 }
 
 pub trait Trait: system::Trait + timestamp::Trait {
@@ -19,56 +20,105 @@ pub trait Trait: system::Trait + timestamp::Trait {
 decl_storage! {
     trait Store for Module<T: Trait> as DID {
         pub DelegateOf get(delegate_of): map (T::AccountId, Vec<u8>, T::AccountId) => Option<T::Moment>;
-        pub AttributeOf get(attribute_of): map T::AccountId => Attribute<T::Moment>;
+        pub AttributeOf get(attribute_of): map (T::AccountId, T::Hash) => Attribute<T::Moment, T::Index>;
         pub OwnerOf get(owner_of): map T::AccountId => Option<T::AccountId>;
         pub ChangedOn get(changed_on): map T::AccountId => T::BlockNumber;
-        pub NonceOf get(nonce_of): map T::AccountId => u64;
-        pub AccountNonce get(account_nonce): map T::AccountId => T::Index;
+        pub AccountNonce get(nonce_of): map T::AccountId => T::Index;
     }
 }
 
 decl_module! {
     pub struct Module<T: Trait> for enum Call where origin: T::Origin {
-        // initialize the default event for this module
+
         fn deposit_event<T>() = default;
 
         pub fn change_owner(origin, identity: T::AccountId, actual_owner: T::AccountId, new_owner: T::AccountId) {
                 let who = ensure_signed(origin)?;
                 ensure!(who == actual_owner, "invalid owner");
-                ensure!(Self::_is_owner(identity.clone(), actual_owner.clone()), "you do not own this DID");
-                let now_block = <system::Module<T>>::block_number();
+                ensure!(Self::_is_owner(identity.clone(), actual_owner.clone()), "you do not own this identity");
+                
+                let now_block_number = <system::Module<T>>::block_number();
+                
                 <OwnerOf<T>>::insert(&identity, &new_owner);
-                <ChangedOn<T>>::insert(&identity, &now_block);
-                Self::deposit_event(RawEvent::DIDOwnerChanged(identity, actual_owner, now_block));
+                <ChangedOn<T>>::insert(&identity, &now_block_number);
+                
+                Self::deposit_event(RawEvent::DIDOwnerChanged(identity, actual_owner, now_block_number));
         }
 
         pub fn add_delegate(origin, identity: T::AccountId, delegate: T::AccountId, delegate_type: Vec<u8>, valid_for: T::Moment)  {
                 let who = ensure_signed(origin)?;
                 ensure!(delegate_type.len() <= 64, "delegate type cannot exceed 64 bytes");
-                ensure!(Self::_is_owner(identity.clone(), who.clone()), "you do not own this DID");
-                let now_time = <timestamp::Module<T>>::now();
-                let validity = now_time + valid_for.clone();
+                ensure!(Self::_is_owner(identity.clone(), who.clone()), "you do not own this identity");
+                
+                let now_timestamp = <timestamp::Module<T>>::now();
+                let validity = now_timestamp + valid_for.clone();
+                
                 <DelegateOf<T>>::insert((identity.clone(), delegate_type.clone(), delegate.clone()), validity.clone());
+                
                 Self::deposit_event(RawEvent::DIDDelegateChanged(identity, delegate_type, delegate, validity, valid_for));
         }
 
         pub fn revoke_delegate(origin, identity: T::AccountId, delegate_type: Vec<u8>, delegate: T::AccountId) {
                 let who = ensure_signed(origin)?;
                 ensure!(delegate_type.len() <= 64, "delegate type cannot exceed 64 bytes");
-                ensure!(Self::_is_owner(identity.clone(), who.clone()), "you do not own this DID");
+                ensure!(Self::_is_owner(identity.clone(), who.clone()), "you do not own this identity");
                 ensure!(Self::_is_valid_delegate(identity.clone(), delegate_type.clone(), delegate.clone()), "invalid delegate");
-                let now_time = <timestamp::Module<T>>::now();
-                let now_block = <system::Module<T>>::block_number();
-                <DelegateOf<T>>::insert((identity.clone(), delegate_type.clone(), delegate.clone()), now_time.clone());
-                <ChangedOn<T>>::insert(&identity, now_block);
+                
+                let now_timestamp = <timestamp::Module<T>>::now();
+                let now_block_number = <system::Module<T>>::block_number();
+                
+                <DelegateOf<T>>::insert((identity.clone(), delegate_type.clone(), delegate.clone()), now_timestamp.clone());
+                <ChangedOn<T>>::insert(&identity, now_block_number);
+                
                 Self::deposit_event(RawEvent::RevokedDelegate(identity, delegate_type, delegate));
         }
 
         pub fn valid_delegate(origin, identity: T::AccountId, delegate_type: Vec<u8>, delegate: T::AccountId) -> Result {
+                let _who = ensure_signed(origin)?;
+                
                 ensure!(delegate_type.len() <= 64, "delegate type cannot exceed 64 bytes");
                 ensure!(Self::_is_valid_delegate(identity.clone(), delegate_type.clone(), delegate.clone()),"Invalid delegate");
+                
                 Self::deposit_event(RawEvent::DIDValidDelegate(identity, delegate_type, delegate));
+                
                 Ok(())
+        }
+
+        pub fn add_attribute(origin, identity: T::AccountId, attribute_type: [u8; 32], attribute: Vec<u8>, valid_for: T::Moment)  {
+                let who = ensure_signed(origin)?;
+                ensure!(Self::_is_owner(identity.clone(), who.clone()), "you do not own this identity");
+
+                let now_timestamp = <timestamp::Module<T>>::now();
+                let validity = now_timestamp + valid_for.clone();
+                let identity_nonce = Self::nonce_of(&identity) + T::Index::one();
+                <AccountNonce<T>>::insert(&identity, &identity_nonce);
+
+                let new_attribute = Attribute {
+                    id_type: attribute_type.clone(),
+                    value: attribute.clone(),
+                    validity: validity.clone(),
+                    nonce: identity_nonce,
+                };
+
+                let attribute_id = (&identity, &attribute_type, identity_nonce).using_encoded(<T as system::Trait>::Hashing::hash);
+
+                <AttributeOf<T>>::insert((identity.clone(), attribute_id), new_attribute);
+                Self::deposit_event(RawEvent::DIDAttributeChanged(identity, attribute_type.to_vec(), attribute, validity));
+        }
+
+        // TODO: get the nonce from attribute
+        pub fn delete_attribute(origin, identity: T::AccountId, attribute_type: [u8; 32], attribute: Vec<u8>, valid_for: T::Moment)  {
+                let who = ensure_signed(origin)?;
+                ensure!(Self::_is_owner(identity.clone(), who.clone()), "you do not own this identity");
+
+                let now_timestamp = <timestamp::Module<T>>::now();
+                let identity_nonce = Self::nonce_of(&identity) + T::Index::one();
+                <AccountNonce<T>>::insert(&identity, &identity_nonce);
+
+                let attribute_id = (&identity, &attribute_type, identity_nonce).using_encoded(<T as system::Trait>::Hashing::hash);
+
+                <AttributeOf<T>>::remove((identity.clone(), attribute_id));
+                Self::deposit_event(RawEvent::DIDAttributeChanged(identity, attribute_type.to_vec(), attribute, now_timestamp));
         }
     }
 }
@@ -110,10 +160,10 @@ impl<T: Trait> Module<T> {
     }
 
     fn _is_valid_delegate(identity: T::AccountId, delegate_type: Vec<u8>, delegate: T::AccountId) -> bool {
-        let now_time = <timestamp::Module<T>>::now();
+        let now_timestamp = <timestamp::Module<T>>::now();
         let validity = Self::delegate_of((identity.clone(), delegate_type.clone(), delegate.clone()));
         let valid = match validity {
-            Some(val) => val > now_time,
+            Some(val) => val > now_timestamp,
             None => false,
         };
         valid
