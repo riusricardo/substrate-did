@@ -90,7 +90,8 @@ decl_module! {
 
         pub fn valid_delegate(_origin, identity: T::AccountId, delegate_type: Vec<u8>, delegate: T::AccountId) -> Result {
                 ensure!(delegate_type.len() <= 32, "delegate type cannot exceed 32 bytes");
-                Self::_is_valid_delegate(&identity, &delegate_type, &delegate)?;
+                ensure!(Self::_is_valid_delegate(&identity, &delegate_type, &delegate).is_ok() ||
+                Self::_is_owner(&identity, &delegate).is_ok(),"invalid delegate");
                 
                 Ok(())
         }
@@ -103,7 +104,7 @@ decl_module! {
                     false => Err("invalid attribute"),
                 }
         }
-
+        // TODO: revoke delegate if it is in the delegate list before transfering ownership
         pub fn change_owner(origin, identity: T::AccountId, new_owner: T::AccountId) -> Result {
                 let who = ensure_signed(origin)?;
                 Self::_is_owner(&identity, &who)?;
@@ -122,6 +123,7 @@ decl_module! {
         pub fn add_delegate(origin, identity: T::AccountId, delegate: T::AccountId, delegate_type: Vec<u8>, valid_for: T::BlockNumber) -> Result {
                 let who = ensure_signed(origin)?;
                 Self::_is_owner(&identity, &who)?;
+                ensure!(&who != &delegate,"owner cannot be explicity set as delegate");
                 ensure!(!Self::_is_valid_delegate(&identity, &delegate_type, &delegate).is_ok(), "delegate exists");
                 ensure!(delegate_type.len() <= 32, "delegate type cannot exceed 32 bytes");
                 
@@ -321,21 +323,23 @@ impl<T: Trait> Module<T> {
 /// tests for this module
 #[cfg(test)]
 mod tests {
-	use super::*;
-	use runtime_io::with_externalities;
-	use srml_support::{impl_outer_origin, impl_outer_dispatch, assert_noop, assert_ok};
-	use substrate_primitives::{H256, Blake2Hasher};
-	use primitives::BuildStorage;
-	use primitives::traits::{BlakeTwo256, IdentityLookup};
-	use primitives::testing::{Digest, DigestItem, Header};
+    use super::*;
+	use support::{impl_outer_origin, assert_ok, assert_noop};
+	use runtime_io::{with_externalities, TestExternalities};
+	use primitives::{H256, Blake2Hasher};
+	use runtime_primitives::{
+		BuildStorage,
+        traits::{BlakeTwo256, IdentityLookup},
+		testing::{Digest, DigestItem, Header}
+	};
 
 	impl_outer_origin! {
 		pub enum Origin for DIDTest {}
 	}
 
-	#[derive(Clone, Eq, PartialEq, Debug)]
-	pub struct Test;
-	impl system::Trait for Test {
+	#[derive(Clone, Eq, PartialEq)]
+	pub struct DIDTest;
+	impl system::Trait for DIDTest {
 		type Origin = Origin;
 		type Index = u64;
 		type BlockNumber = u64;
@@ -348,22 +352,156 @@ mod tests {
 		type Event = ();
 		type Log = DigestItem;
 	}
-	impl Trait for Test {
+	
+	impl balances::Trait for DIDTest {
+		type Balance = u64;
+		type OnFreeBalanceZero = ();
+		type OnNewAccount = ();
+		type Event = ();
+		type TransactionPayment = ();
+		type TransferPayment = ();
+		type DustRemoval = ();
+	}
+
+	impl timestamp::Trait for DIDTest {
+        type Moment = u64;
+        type OnTimestampSet = ();
+	}
+
+	impl super::Trait for DIDTest {
 		type Event = ();
 	}
-	type DID = Module<Test>;
-    type System = system::Module<Test>;
 
-	// This function basically just builds a genesis storage key/value store according to
-	// our desired mockup.
-	fn new_test_ext() -> runtime_io::TestExternalities<Blake2Hasher> {
-		system::GenesisConfig::<Test>::default().build_storage().unwrap().0.into()
+	fn new_test_ext() -> TestExternalities<Blake2Hasher> {
+        let t = system::GenesisConfig::<DIDTest>::default().build_storage().unwrap().0;
+        TestExternalities::new(t)
 	}
 
+	type DID = super::Module<DIDTest>;
+    type System = system::Module<DIDTest>;
+
 	#[test]
-	fn it_works_for_default_value() {
+	fn transfer_ownership_should_work() {
+		with_externalities(&mut new_test_ext(), || {
+            
+            // Get the owner of an identity
+            assert_eq!(DID::identity_owner(&1),1);
+
+            // Verify identity owner
+            assert_ok!(DID::_is_owner(&1,&1));
+
+            // Transfer identity ownership
+            assert_ok!(DID::change_owner(Origin::signed(1), 1, 2));
+
+            // Previous owner is invalid
+            assert_noop!(DID::_is_owner(&1,&1),"invalid owner");
+
+            // Verify new owner
+            assert_ok!(DID::_is_owner(&1,&2));
+
+            // Get the new owner of an identity
+            assert_eq!(DID::identity_owner(&1),2);
+		})
+	}
+
+    #[test]
+	fn owner_as_delegate_should_work() {
 		with_externalities(&mut new_test_ext(), || {
 
-		});
+            System::set_block_number(1);
+
+            // Owner is a valid degate for any type and time
+            assert_ok!(DID::valid_delegate(Origin::signed(99),1,vec![7,7,7],1));
+
+            System::set_block_number(1000);
+
+            // Owner is a valid degate for any type and time
+            assert_ok!(DID::valid_delegate(Origin::signed(99),1,vec![9,9,9],1));
+
+            System::set_block_number(2000);
+
+            // Transfer identity ownership to AccountId-2
+            assert_ok!(DID::change_owner(Origin::signed(1), 1, 2));
+
+            // Previous identity owner should be an invalid delegate
+            assert_noop!(DID::valid_delegate(Origin::signed(99),1,vec![7,7,7],1),"invalid delegate");
+
+            // New owner is a valid delegate
+            assert_ok!(DID::valid_delegate(Origin::signed(99),1,vec![8,8,8],2));
+
+		})
+	}
+
+    #[test]
+	fn add_new_delegate_should_work() {
+		with_externalities(&mut new_test_ext(), || {
+
+            // Should fail to explicity set owner(AccountId-1) in the delegates list
+            assert_noop!(DID::add_delegate(Origin::signed(1),1,1,vec![7,7,7],20),"owner cannot be explicity set as delegate");
+
+            // AccountId-5 is an invalid delegate previous to adding it
+            assert_noop!(DID::valid_delegate(Origin::signed(99),1,vec![7,7,7],5),"invalid delegate");
+
+            // Add AccountId-5 as delegate of AccountId-1 for a period of 20 blocks
+            assert_ok!(DID::add_delegate(Origin::signed(1),1,5,vec![7,7,7],20));
+
+            // AccountId-5 is a valid for a specified type
+            assert_ok!(DID::valid_delegate(Origin::signed(99),1,vec![7,7,7],5));
+
+            // AccountId-5 is an invalid delegate for a different type
+            assert_noop!(DID::valid_delegate(Origin::signed(99),1,vec![8,8,8],5),"invalid delegate");
+
+		})
+	}
+
+    #[test]
+	fn delegate_expiration_should_work() {
+		with_externalities(&mut new_test_ext(), || {
+
+            System::set_block_number(1);
+
+            // Add AccountId-5 as delegate of AccountId-1 for a period of 3 blocks
+            assert_ok!(DID::add_delegate(Origin::signed(1),1,5,vec![7,7,7],3));
+
+            System::set_block_number(3);
+            
+            // AccountId-5 is a valid specific type delegate
+            assert_ok!(DID::valid_delegate(Origin::signed(99),1,vec![7,7,7],5));
+
+            System::set_block_number(4);
+
+            // AccountId-5 is an invalid delegate after expiration
+            assert_noop!(DID::valid_delegate(Origin::signed(99),1,vec![7,7,7],5),"invalid delegate");
+
+		})
+	}
+
+    #[test]
+	fn delegate_revocation_should_work() {
+		with_externalities(&mut new_test_ext(), || {
+
+            System::set_block_number(1);
+
+            // Add AccountId-5 as delegate of AccountId-1 for a period of 1000 blocks
+            assert_ok!(DID::add_delegate(Origin::signed(1),1,5,vec![7,7,7],1000));
+
+            System::set_block_number(50);
+            
+            // AccountId-5 is a valid specific type delegate
+            assert_ok!(DID::valid_delegate(Origin::signed(99),1,vec![7,7,7],5));
+
+            // AccountId-5 is revoked as delegate from AccountId-1
+            assert_ok!(DID::revoke_delegate(Origin::signed(1),1,vec![7,7,7],5));
+
+            // Delegate max valid block is current block
+            assert_eq!(DID::delegate_of((1,vec![7,7,7],5)),Some(50));
+
+            System::set_block_number(51);
+
+            // AccountId-5 is an invalid delegate after revocation
+            assert_noop!(DID::valid_delegate(Origin::signed(99),1,vec![7,7,7],5),"invalid delegate");
+
+
+		})
 	}
 }
