@@ -3,7 +3,7 @@
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
 
-// This module was inspired by ERC-1056 "Ethereum DID Registry"
+// This module was based on ERC-1056
 // DID compliant. https://w3c-ccg.github.io/did-spec/
 
 //! # DID Module
@@ -90,21 +90,30 @@ decl_module! {
 
         pub fn valid_delegate(_origin, identity: T::AccountId, delegate_type: Vec<u8>, delegate: T::AccountId) -> Result {
                 ensure!(delegate_type.len() <= 32, "delegate type cannot exceed 32 bytes");
-                ensure!(Self::_is_valid_delegate(&identity, &delegate_type, &delegate).is_ok() ||
-                Self::_is_owner(&identity, &delegate).is_ok(),"invalid delegate");
+                ensure!(
+                    Self::_is_valid_delegate(&identity, &delegate_type, &delegate).is_ok() ||
+                    Self::_is_owner(&identity, &delegate).is_ok(),
+                "invalid delegate");
                 
                 Ok(())
         }
 
         pub fn valid_attribute(_origin, identity: T::AccountId, name: Vec<u8>, value: Vec<u8>) -> Result { 
                 ensure!(name.len() <= 64, "invalid attribute name");
-                let (attr, _) = Self::_attribute_and_id(identity, name).unwrap();
-                match (attr.validity > (<system::Module<T>>::block_number())) && (attr.value == value) {
-                    true => Ok(()),
-                    false => Err("invalid attribute"),
+                let result = Self::_attribute_and_id(identity, name);
+
+                let (attr, _id) = match result {
+                    Some((attr, id)) => (attr, id),
+                    None => return Err("invalid attribute"),
+                };
+
+                if (attr.validity > (<system::Module<T>>::block_number())) && (attr.value == value) {
+                    Ok(())
+                } else {
+                    Err("invalid attribute")
                 }
         }
-        // TODO: revoke delegate if it is in the delegate list before transfering ownership
+
         pub fn change_owner(origin, identity: T::AccountId, new_owner: T::AccountId) -> Result {
                 let who = ensure_signed(origin)?;
                 Self::_is_owner(&identity, &who)?;
@@ -379,6 +388,7 @@ mod tests {
 
 	type DID = super::Module<DIDTest>;
     type System = system::Module<DIDTest>;
+    type Moment = timestamp::Module<DIDTest>;
 
 	#[test]
 	fn transfer_ownership_should_work() {
@@ -426,14 +436,14 @@ mod tests {
             // Previous identity owner should be an invalid delegate
             assert_noop!(DID::valid_delegate(Origin::signed(99),1,vec![7,7,7],1),"invalid delegate");
 
-            // New owner is a valid delegate
+            // New owner is a valid delegate for any type and time
             assert_ok!(DID::valid_delegate(Origin::signed(99),1,vec![8,8,8],2));
 
 		})
 	}
 
     #[test]
-	fn add_new_delegate_should_work() {
+	fn add_delegate_should_work() {
 		with_externalities(&mut new_test_ext(), || {
 
             // Should fail to explicity set owner(AccountId-1) in the delegates list
@@ -477,7 +487,7 @@ mod tests {
 	}
 
     #[test]
-	fn delegate_revocation_should_work() {
+	fn revoke_delegate_should_work() {
 		with_externalities(&mut new_test_ext(), || {
 
             System::set_block_number(1);
@@ -490,7 +500,7 @@ mod tests {
             // AccountId-5 is a valid specific type delegate
             assert_ok!(DID::valid_delegate(Origin::signed(99),1,vec![7,7,7],5));
 
-            // AccountId-5 is revoked as delegate from AccountId-1
+            // AccountId-5 is a revoked delegate from AccountId-1
             assert_ok!(DID::revoke_delegate(Origin::signed(1),1,vec![7,7,7],5));
 
             // Delegate max valid block is current block
@@ -501,7 +511,67 @@ mod tests {
             // AccountId-5 is an invalid delegate after revocation
             assert_noop!(DID::valid_delegate(Origin::signed(99),1,vec![7,7,7],5),"invalid delegate");
 
-
 		})
 	}
+
+    #[test]
+	fn add_attribute_should_work() {
+		with_externalities(&mut new_test_ext(), || {
+
+            System::set_block_number(1);
+            
+            assert_ok!(DID::add_attribute(Origin::signed(1),1,vec![1,2,3],vec![7,7,7],1000));
+            
+            assert_ok!(DID::valid_attribute(Origin::signed(99),1,vec![1,2,3],vec![7,7,7]));
+
+            let (attr, id) = DID::_attribute_and_id(1, vec![1,2,3]).unwrap();
+            
+            // Validate attribute fields
+            assert_eq!(attr.name, vec![1,2,3]);
+            assert_eq!(attr.value, vec![7,7,7]);
+            assert_eq!(attr.validity, 1000 + System::block_number());
+            assert_eq!(attr.creation, Moment::now());
+            assert_eq!(attr.nonce, 0);
+
+            let hash_id = (&1, vec![1,2,3], 0u64).using_encoded(<DIDTest as system::Trait>::Hashing::hash);
+            assert_eq!(hash_id, id);
+		})
+	}
+
+    #[test]
+	fn revoke_attribute_should_work() {
+		with_externalities(&mut new_test_ext(), || {
+
+            System::set_block_number(1);
+
+            assert_ok!(DID::add_attribute(Origin::signed(1),1,vec![1,2,3],vec![7,7,7],100));
+            
+            System::set_block_number(5);
+
+            assert_ok!(DID::revoke_attribute(Origin::signed(1),1,vec![1,2,3]));
+
+            System::set_block_number(50);
+
+            assert_noop!(DID::valid_attribute(Origin::signed(99),1,vec![1,2,3],vec![7,7,7]),"invalid attribute");
+		})
+	}
+
+    #[test]
+	fn delete_attribute_should_work() {
+		with_externalities(&mut new_test_ext(), || {
+
+            System::set_block_number(1);
+
+            assert_ok!(DID::add_attribute(Origin::signed(1),1,vec![1,2,3],vec![7,7,7],100));
+            
+            System::set_block_number(5);
+
+            assert_ok!(DID::delete_attribute(Origin::signed(1),1,vec![1,2,3]));
+
+            System::set_block_number(50);
+
+            assert_noop!(DID::valid_attribute(Origin::signed(99),1,vec![1,2,3],vec![7,7,7]),"invalid attribute");
+		})
+	}
+
 }
