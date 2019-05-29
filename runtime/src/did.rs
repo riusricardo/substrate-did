@@ -64,17 +64,14 @@
 //!
 //! *
 
-use support::{decl_event, decl_module, decl_storage, ensure, StorageMap, dispatch::{Result, Vec}};
-use runtime_primitives::{AnySignature, traits::{Hash, Verify}};
+use support::{decl_event, decl_module, decl_storage, ensure, StorageMap, Parameter, 
+            dispatch::{Result, Vec}
+};
+use runtime_primitives::{traits::{Hash, Verify}};
 use parity_codec::{Encode, Decode};
 use system::{self, ensure_signed, ensure_none};
 use rstd::{prelude::*};
 
-
-/// Alias to 512-bit hash when used in the context of a transaction signature on the chain.
-pub type Signature = AnySignature;
-/// Alias to pubkey that identifies an account on the chain.
-pub type AccountKey = <Signature as Verify>::Signer;
 
 /// Attributes or properties that make up an identity.
 #[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Encode, Decode, Default)]
@@ -90,14 +87,15 @@ pub struct Attribute<BlockNumber, Moment> {
 /// Off-chain signed transaction.
 #[derive(PartialEq, Eq, PartialOrd, Ord, Default, Clone, Encode, Decode, Hash)]
 #[cfg_attr(feature = "std", derive(Debug))]
-pub struct Transaction<AnySignature,AccountKey> {
-    signature: AnySignature, 
+pub struct Transaction<Signature,AccountId> {
+    signature: Signature, 
     msg: Vec<u8>, 
-    signer: AccountKey
+    signer: AccountId
 }
 
-pub trait Trait: system::Trait + timestamp::Trait {
+pub trait Trait: system::Trait + timestamp::Trait + balances::Trait {
     type Event: From<Event<Self>> + Into<<Self as system::Trait>::Event>;
+    type Signature: Parameter + Default + Verify<Signer=Self::AccountId>;
 }
 
 decl_storage! {
@@ -105,8 +103,6 @@ decl_storage! {
         /// Identity delegates stored by type.
         /// Delegates are only valid for a specific period defined as blocks number.
         pub DelegateOf get(delegate_of): map (T::AccountId, Vec<u8>, T::AccountId) => Option<T::BlockNumber>;
-        /// Public keys related to an AccountId.
-        pub AccountKeyOf get(account_key_of): map T::AccountId => AccountKey;
         /// The attributes that belong to an identity. 
         /// Attributes are only valid for a specific period defined as blocks number.
         pub AttributeOf get(attribute_of): map (T::AccountId, T::Hash) => Attribute<T::BlockNumber, T::Moment>;
@@ -213,6 +209,9 @@ decl_module! {
                 Self::is_owner(&identity, &who)?;
                 ensure!(name.len() <= 64, "invalid attribute name");
 
+                // let fee = 1337.into();
+                // Self::pay_fee(who, fee)?;
+
                 let nonce = Self::nonce_of((identity.clone(), name.clone()));
                 
                 let now_timestamp = <timestamp::Module<T>>::now();
@@ -286,7 +285,7 @@ decl_module! {
         }
 
         /// Executes an off-chain signed transaction.
-        pub fn execute(origin, transaction: Transaction<AnySignature,AccountKey>, signer: AccountKey) -> Result {
+        pub fn execute(origin, transaction: Transaction<T::Signature,T::AccountId>, signer: T::AccountId) -> Result {
             ensure_none(origin)?;
             ensure!(Self::check_signature(&transaction.signature, &transaction.msg, &signer),"invalid signature");
             
@@ -304,6 +303,7 @@ decl_event!(
   where
   <T as system::Trait>::AccountId,
   <T as system::Trait>::BlockNumber,
+  <T as Trait>::Signature
   {
     OwnerChanged(AccountId, AccountId, AccountId, BlockNumber),
     DelegateAdded(AccountId, Vec<u8>, AccountId, BlockNumber, BlockNumber),
@@ -311,7 +311,7 @@ decl_event!(
     AttributeAdded(AccountId,Vec<u8>,BlockNumber),
     AttributeRevoked(AccountId,Vec<u8>,BlockNumber),
     AttributeDeleted(AccountId,Vec<u8>,BlockNumber),
-    TransactionExecuted(Transaction<AnySignature,AccountKey>),
+    TransactionExecuted(Transaction<Signature,AccountId>),
   }
 );
 
@@ -368,14 +368,14 @@ impl<T: Trait> Module<T> {
     }
 
     /// Checks if a signature is valid. Used to validate off-chain transactions.
-    fn check_signature(signature: &AnySignature, msg: &Vec<u8>, signer: &AccountKey) -> bool {
+    fn check_signature(signature: &T::Signature, msg: &Vec<u8>, signer: &T::AccountId) -> bool {
 
         let encoded = msg.encode();
         signature.verify(&encoded[..], signer.into())
     }
 
     /// Executes storage changes after receibing a valid signed off-chain transaction.
-    fn update_storage(_transaction: &Transaction<AnySignature,AccountKey>) -> Result {
+    fn update_storage(_transaction: &Transaction<T::Signature,T::AccountId>) -> Result {
 
         Ok(())
     }

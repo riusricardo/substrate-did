@@ -190,6 +190,7 @@ impl sudo::Trait for Runtime {
 /// Used for the module did in `./did.rs`
 impl did::Trait for Runtime {
 	type Event = Event;
+	type Signature = AccountSignature;
 }
 
 construct_runtime!(
