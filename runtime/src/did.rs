@@ -40,9 +40,7 @@
 //!
 //! The DID system in Substrate is designed to make the following possible:
 //!
-//! * Issue a unique asset to its creator's account.
-//! * Move assets between accounts.
-//! * Remove an account's balance of an asset when requested by that account's owner and update the asset's total supply.
+//! * management for DIDs
 //!
 //! ### Dispatchable Functions
 //!
@@ -65,7 +63,8 @@
 //! *
 
 use support::{decl_event, decl_module, decl_storage, ensure, StorageMap, Parameter, 
-            dispatch::{Result, Vec}
+            dispatch::{Result, Vec},
+            //traits::{Currency, ExistenceRequirement, WithdrawReason}
 };
 use runtime_primitives::{traits::{Hash, Verify}};
 use parity_codec::{Encode, Decode};
@@ -208,10 +207,7 @@ decl_module! {
                 let who = ensure_signed(origin)?;
                 Self::is_owner(&identity, &who)?;
                 ensure!(name.len() <= 64, "invalid attribute name");
-
-                // let fee = 1337.into();
-                // Self::pay_fee(who, fee)?;
-
+                
                 let nonce = Self::nonce_of((identity.clone(), name.clone()));
                 
                 let now_timestamp = <timestamp::Module<T>>::now();
@@ -287,7 +283,7 @@ decl_module! {
         /// Executes an off-chain signed transaction.
         pub fn execute(origin, transaction: Transaction<T::Signature,T::AccountId>, signer: T::AccountId) -> Result {
             ensure_none(origin)?;
-            ensure!(Self::check_signature(&transaction.signature, &transaction.msg, &signer),"invalid signature");
+            Self::check_signature(&transaction.signature, &transaction.msg, &signer)?;
             
             Self::update_storage(&transaction)?;
 
@@ -368,10 +364,13 @@ impl<T: Trait> Module<T> {
     }
 
     /// Checks if a signature is valid. Used to validate off-chain transactions.
-    fn check_signature(signature: &T::Signature, msg: &Vec<u8>, signer: &T::AccountId) -> bool {
-
-        let encoded = msg.encode();
-        signature.verify(&encoded[..], signer.into())
+    pub fn check_signature(signature: &T::Signature, msg: &[u8], signer: &T::AccountId) -> Result {
+        
+        if signature.verify(msg, signer.into()) {
+            Ok(())
+        } else{
+            Err("invalid signature")
+        }
     }
 
     /// Executes storage changes after receibing a valid signed off-chain transaction.
