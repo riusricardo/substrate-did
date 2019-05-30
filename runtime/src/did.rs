@@ -40,7 +40,7 @@
 //!
 //! The DID system in Substrate is designed to make the following possible:
 //!
-//! * management for DIDs
+//! * 
 //!
 //! ### Dispatchable Functions
 //!
@@ -68,7 +68,7 @@ use support::{decl_event, decl_module, decl_storage, ensure, StorageMap, Paramet
 };
 use runtime_primitives::{traits::{Hash, Verify}};
 use parity_codec::{Encode, Decode};
-use system::{self, ensure_signed, ensure_none};
+use system::{self, ensure_signed};
 use rstd::{prelude::*};
 
 
@@ -87,9 +87,9 @@ pub struct Attribute<BlockNumber, Moment> {
 #[derive(PartialEq, Eq, PartialOrd, Ord, Default, Clone, Encode, Decode, Hash)]
 #[cfg_attr(feature = "std", derive(Debug))]
 pub struct Transaction<Signature,AccountId> {
-    signature: Signature, 
-    msg: Vec<u8>, 
-    signer: AccountId
+    pub signature: Signature, 
+    pub msg: Vec<u8>, 
+    pub signer: AccountId
 }
 
 pub trait Trait: system::Trait + timestamp::Trait + balances::Trait {
@@ -110,7 +110,7 @@ decl_storage! {
         /// Identity owner.
         pub OwnerOf get(owner_of): map T::AccountId => Option<T::AccountId>;
         /// Tracking the latest identity update.
-        pub UpdatedOn get(updated_on): map T::AccountId => (T::BlockNumber, T::Moment);
+        pub UpdatedBy get(updated_by): map T::AccountId => (T::AccountId, T::BlockNumber, T::Moment);
     }
 }
 
@@ -156,7 +156,7 @@ decl_module! {
                 let now_block_number = <system::Module<T>>::block_number();
                 
                 <OwnerOf<T>>::insert(&identity, &new_owner);
-                <UpdatedOn<T>>::insert(&identity, (now_block_number.clone(), now_timestamp));
+                <UpdatedBy<T>>::insert(&identity, (who.clone(), now_block_number.clone(), now_timestamp));
                 
                 Self::deposit_event(RawEvent::OwnerChanged(identity, who, new_owner, now_block_number));
         
@@ -176,7 +176,7 @@ decl_module! {
                 let validity = now_block_number.clone() + valid_for.clone();
 
                 <DelegateOf<T>>::insert((identity.clone(), delegate_type.clone(), delegate.clone()), validity.clone());
-                <UpdatedOn<T>>::insert(&identity, (now_block_number, now_timestamp));
+                <UpdatedBy<T>>::insert(&identity, (who, now_block_number, now_timestamp));
 
                 Self::deposit_event(RawEvent::DelegateAdded(identity, delegate_type, delegate, validity, valid_for));
         
@@ -195,7 +195,7 @@ decl_module! {
                 
                 // Update only the validity period to revoke the delegate.
                 <DelegateOf<T>>::mutate((identity.clone(), delegate_type.clone(), delegate.clone()), |b| *b = Some(now_block_number.clone()));
-                <UpdatedOn<T>>::insert(&identity, (now_block_number, now_timestamp));
+                <UpdatedBy<T>>::insert(&identity, (who, now_block_number, now_timestamp));
                 
                 Self::deposit_event(RawEvent::DelegateRevoked(identity, delegate_type, delegate));
 
@@ -228,7 +228,7 @@ decl_module! {
 
                 // Update only the validity field to revoke the attribute.
                 <AttributeNonce<T>>::mutate((identity.clone(), name.clone()), |n| *n += 1);
-                <UpdatedOn<T>>::insert(&identity, (<system::Module<T>>::block_number(), now_timestamp));
+                <UpdatedBy<T>>::insert(&identity, (who, <system::Module<T>>::block_number(), now_timestamp));
 
                 Self::deposit_event(RawEvent::AttributeAdded(identity, name, validity));
 
@@ -252,7 +252,7 @@ decl_module! {
                     None => return Err("invalid attribute"),
                 }
                 
-                <UpdatedOn<T>>::insert(&identity, (now_block_number.clone(), <timestamp::Module<T>>::now()));
+                <UpdatedBy<T>>::insert(&identity, (who, now_block_number.clone(), <timestamp::Module<T>>::now()));
                 
                 Self::deposit_event(RawEvent::AttributeRevoked(identity, name, now_block_number));
                 
@@ -273,7 +273,7 @@ decl_module! {
                     None => return Err("invalid attribute"),
                 }
 
-                <UpdatedOn<T>>::insert(&identity, (now_block_number.clone(), <timestamp::Module<T>>::now()));
+                <UpdatedBy<T>>::insert(&identity, (who, now_block_number.clone(), <timestamp::Module<T>>::now()));
                 
                 Self::deposit_event(RawEvent::AttributeDeleted(identity, name, now_block_number));
 
@@ -281,12 +281,10 @@ decl_module! {
         }
 
         /// Executes an off-chain signed transaction.
-        pub fn execute(origin, transaction: Transaction<T::Signature,T::AccountId>, signer: T::AccountId) -> Result {
-            ensure_none(origin)?;
-            Self::check_signature(&transaction.signature, &transaction.msg, &signer)?;
-            
-            Self::update_storage(&transaction)?;
-
+        pub fn execute(origin, transaction: Transaction<T::Signature,T::AccountId>) -> Result {
+            let who = ensure_signed(origin)?;
+            Self::check_signature(&transaction.signature, &transaction.msg, &transaction.signer)?;
+            Self::add_signed_attribute(who, &transaction)?;
             Self::deposit_event(RawEvent::TransactionExecuted(transaction));
 
             Ok(())
@@ -369,13 +367,15 @@ impl<T: Trait> Module<T> {
         if signature.verify(msg, signer.into()) {
             Ok(())
         } else{
-            Err("invalid signature")
+            Err("invalid signer")
         }
     }
 
-    /// Executes storage changes after receibing a valid signed off-chain transaction.
-    fn update_storage(_transaction: &Transaction<T::Signature,T::AccountId>) -> Result {
+    /// Creates a new attribute from a off-chain transaction.
+    fn add_signed_attribute(signer: T::AccountId, _transaction: &Transaction<T::Signature,T::AccountId>) -> Result {
 
+        <UpdatedBy<T>>::insert(signer.clone(), (signer, <system::Module<T>>::block_number(), <timestamp::Module<T>>::now()));
+            
         Ok(())
     }
 }

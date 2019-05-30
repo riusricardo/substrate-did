@@ -74,6 +74,7 @@ mod tests {
     type DID = did::Module<DIDTest>;
     type System = system::Module<DIDTest>;
     type Moment = timestamp::Module<DIDTest>;
+    type Transaction<Signature,AccountId> = did::Transaction<Signature,AccountId>;
 
     #[test]
 	fn check_account_signature_should_work() {
@@ -81,11 +82,45 @@ mod tests {
             
             let data = [1,2,3].encode();            // Data to be signed.
             let alice_pair = account_pair("Alice"); // Create a new account pair.
-            let alice_sig = alice_pair.sign(&data); // Sign the data with account private key.
-            let alice_public = alice_pair.public(); // Get the account public address.
+            let alice_sig = alice_pair.sign(&data); // Sign the data with private key.
+            let alice_public = alice_pair.public(); // Get the public key.
             
-            // Validate that the account signed the message.
+            // Validate that Alice signed the message.
             assert_ok!(DID::check_signature(&alice_sig, &data, &alice_public));
+
+            let bob_public = account_key("Bob"); // Create a different public key.
+            
+            // Verify that Bob did not signed the data.
+            assert_noop!(DID::check_signature(&alice_sig, &data, &bob_public),"invalid signer");
+        })
+	}
+
+    #[test]
+	fn add_signed_attribute_should_work() {
+        with_externalities(&mut new_test_ext(), || {
+            
+            let data = [1,2,3].encode();            // Data to be signed.
+            let alice_pair = account_pair("Alice"); // Create a new account pair.
+            let alice_sig = alice_pair.sign(&data); // Sign the data with private key.
+            let alice_public = alice_pair.public(); // Get the public key.
+
+            /**********************************************
+            pub struct Transaction<Signature,AccountId> {
+                pub signature: Signature, 
+                pub msg: Vec<u8>, 
+                pub signer: AccountId
+            } 
+            ***********************************************/
+
+            let new_transaction = Transaction {
+                signature: alice_sig,
+                msg: data,
+                signer: alice_public.clone(),
+            };
+
+            // Update with signed transaction.
+            assert_ok!(DID::execute(Origin::signed(alice_public.clone()), new_transaction));
+            assert_eq!(DID::updated_by(&alice_public),(alice_public, System::block_number(), Moment::now()));
         })
 	}
 
