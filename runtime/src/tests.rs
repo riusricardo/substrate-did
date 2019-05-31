@@ -13,6 +13,7 @@ mod tests {
 		testing::{Digest, DigestItem, Header}
 	};
 	use primitives::{H256, Blake2Hasher, sr25519, Pair};
+    use std::string::String;
 
 	impl_outer_origin! {
 		pub enum Origin for DIDTest {}
@@ -99,28 +100,39 @@ mod tests {
 	fn add_signed_attribute_should_work() {
         with_externalities(&mut new_test_ext(), || {
             
-            let data = [1,2,3].encode();            // Data to be signed.
-            let alice_pair = account_pair("Alice"); // Create a new account pair.
-            let alice_sig = alice_pair.sign(&data); // Sign the data with private key.
-            let alice_public = alice_pair.public(); // Get the public key.
+            System::set_block_number(1);
 
-            /**********************************************
-            pub struct Transaction<Signature,AccountId> {
-                pub signature: Signature, 
-                pub msg: Vec<u8>, 
-                pub signer: AccountId
-            } 
-            ***********************************************/
+            let name: Vec<u8> = String::from("MyAttribute").into();
+            let value = [1,2,3].to_vec();
+            let validity = 50;
+
+            let mut encoded = name.encode();
+            encoded.extend(value.encode());
+            encoded.extend(validity.encode());
+
+            let alice_pair = account_pair("Alice");     // Create a new account pair.
+            let alice_sig = alice_pair.sign(&encoded);  // Sign the data with private key.
+            let alice_public = alice_pair.public();     // Get the public key.
 
             let new_transaction = Transaction {
                 signature: alice_sig,
-                msg: data,
+                name: name.clone(),
+                value: value.clone(),
+                validity,
                 signer: alice_public.clone(),
             };
 
             // Update with signed transaction.
             assert_ok!(DID::execute(Origin::signed(alice_public.clone()), new_transaction));
-            assert_eq!(DID::updated_by(&alice_public),(alice_public, System::block_number(), Moment::now()));
+            
+            // Validate that the attribute exists and has not expired.
+            assert_ok!(DID::valid_attribute(Origin::signed(account_key("None")),alice_public.clone(),name.clone(),value.clone()));
+
+            System::set_block_number(51);            
+            
+            // Validate that the attribute expired.
+            assert_noop!(DID::valid_attribute(Origin::signed(account_key("None")),alice_public,name,value),"invalid attribute");
+
         })
 	}
 
