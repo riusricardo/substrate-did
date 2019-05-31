@@ -86,12 +86,13 @@ pub struct Attribute<BlockNumber, Moment> {
 /// Off-chain signed transaction.
 #[derive(PartialEq, Eq, PartialOrd, Ord, Default, Clone, Encode, Decode, Hash)]
 #[cfg_attr(feature = "std", derive(Debug))]
-pub struct Transaction<Signature,AccountId> {
+pub struct AttributeTransaction<Signature,AccountId> {
     pub signature: Signature,
     pub name: Vec<u8>,
     pub value: Vec<u8>,
     pub validity: u32,
-    pub signer: AccountId
+    pub signer: AccountId,
+    pub identity: AccountId
 }
 
 pub trait Trait: system::Trait + timestamp::Trait + balances::Trait {
@@ -252,15 +253,16 @@ decl_module! {
         }
 
         /// Executes off-chain signed transaction.
-        pub fn execute(origin, transaction: Transaction<T::Signature,T::AccountId>) -> Result {
+        pub fn execute(origin, transaction: AttributeTransaction<T::Signature,T::AccountId>) -> Result {
             let who = ensure_signed(origin)?;
 
             let mut encoded = transaction.name.encode();
             encoded.extend(transaction.value.encode());
             encoded.extend(transaction.validity.encode());
+            encoded.extend(transaction.identity.encode());
 
             Self::signed_attribute(who, &encoded, &transaction)?;
-            Self::deposit_event(RawEvent::TransactionExecuted(transaction));
+            Self::deposit_event(RawEvent::AttributeTransactionExecuted(transaction));
 
             Ok(())
         }
@@ -280,7 +282,7 @@ decl_event!(
     AttributeAdded(AccountId,Vec<u8>,BlockNumber),
     AttributeRevoked(AccountId,Vec<u8>,BlockNumber),
     AttributeDeleted(AccountId,Vec<u8>,BlockNumber),
-    TransactionExecuted(Transaction<Signature,AccountId>),
+    AttributeTransactionExecuted(AttributeTransaction<Signature,AccountId>),
   }
 );
 
@@ -347,18 +349,18 @@ impl<T: Trait> Module<T> {
     }
 
     /// Creates a new attribute from a off-chain transaction.
-    fn signed_attribute(who: T::AccountId, encoded: &[u8], transaction: &Transaction<T::Signature,T::AccountId>) -> Result {
-        
+    fn signed_attribute(who: T::AccountId, encoded: &[u8], transaction: &AttributeTransaction<T::Signature,T::AccountId>) -> Result {
         Self::check_signature(&transaction.signature, &encoded, &transaction.signer)?;
+        Self::is_owner(&transaction.identity, &transaction.signer)?;
         
         let now_block_number = <system::Module<T>>::block_number();
         let validity = now_block_number + transaction.validity.into();
 
         if validity > now_block_number {
-            Self::create_attribute(who, &transaction.signer, &transaction.name, &transaction.value, &transaction.validity.into())?;
+            Self::create_attribute(who, &transaction.identity, &transaction.name, &transaction.value, &transaction.validity.into())?;
         
         } else {
-            Self::reset_attribute(who, &transaction.signer, &transaction.name)?;
+            Self::reset_attribute(who, &transaction.identity, &transaction.name)?;
         }
 
         Ok(())
@@ -383,11 +385,11 @@ impl<T: Trait> Module<T> {
             Err("attribute exists")
         } else{
             let new_attribute = Attribute {
-                                            name: name.clone(),
-                                            value: value.clone(),
-                                            validity,
-                                            creation: now_timestamp,
-                                            nonce,
+                                    name: name.clone(),
+                                    value: value.clone(),
+                                    validity,
+                                    creation: now_timestamp,
+                                    nonce,
                                 };
 
             <AttributeOf<T>>::insert((identity.clone(), id), new_attribute);

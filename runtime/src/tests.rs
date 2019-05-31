@@ -75,7 +75,7 @@ mod tests {
     type DID = did::Module<DIDTest>;
     type System = system::Module<DIDTest>;
     type Moment = timestamp::Module<DIDTest>;
-    type Transaction<Signature,AccountId> = did::Transaction<Signature,AccountId>;
+    type AttributeTransaction<Signature,AccountId> = did::AttributeTransaction<Signature,AccountId>;
 
     #[test]
 	fn check_account_signature_should_work() {
@@ -104,20 +104,23 @@ mod tests {
             let value = [1,2,3].to_vec();
             let mut validity: u32 = 50;
 
+            let alice_pair = account_pair("Alice");     // Create a new account pair.
+            let alice_public = alice_pair.public();     // Get the public key.
+
             let mut encoded = name.encode();
             encoded.extend(value.encode());
             encoded.extend(validity.encode());
+            encoded.extend(alice_public.encode());
 
-            let alice_pair = account_pair("Alice");     // Create a new account pair.
-            let create_sig = alice_pair.sign(&encoded);  // Sign the data with private key.
-            let alice_public = alice_pair.public();     // Get the public key.
+            let create_sig = alice_pair.sign(&encoded); // Sign the data with private key.
 
-            let new_transaction = Transaction {
+            let new_transaction = AttributeTransaction {
                 signature: create_sig,
                 name: name.clone(),
                 value: value.clone(),
                 validity,
                 signer: alice_public.clone(),
+                identity: alice_public.clone(),
             };
 
             // Create with signed transaction.
@@ -126,19 +129,21 @@ mod tests {
             // Validate that the attribute exists and has not expired.
             assert_ok!(DID::valid_attribute(Origin::signed(account_key("None")),alice_public.clone(),name.clone(),value.clone()));        
             
-            validity = 0;
+            validity = 0;                       // Set validity to 0 in order to revoke the attribute
             encoded = name.encode();
             encoded.extend(value.encode());
             encoded.extend(validity.encode());
+            encoded.extend(alice_public.encode());
 
             let revoke_sig = alice_pair.sign(&encoded);
 
-            let revoke_transaction = Transaction {
+            let revoke_transaction = AttributeTransaction {
                 signature: revoke_sig,
                 name: name.clone(),
                 value: value.clone(),
                 validity,
                 signer: alice_public.clone(),
+                identity: alice_public.clone(),
             };
 
             // Revoke with signed transaction.
