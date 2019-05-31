@@ -90,7 +90,7 @@ pub struct Transaction<Signature,AccountId> {
     pub signature: Signature,
     pub name: Vec<u8>,
     pub value: Vec<u8>,
-    pub validity: u64,
+    pub validity: u32,
     pub signer: AccountId
 }
 
@@ -210,9 +210,7 @@ decl_module! {
                 Self::is_owner(&identity, &who)?;
                 ensure!(name.len() <= 64, "invalid attribute name");
 
-                Self::create_attribute(&identity, &name, &value, &valid_for)?;
-
-                <UpdatedBy<T>>::insert(&identity, (who, <system::Module<T>>::block_number(), <timestamp::Module<T>>::now()));
+                Self::create_attribute(who, &identity, &name, &value, &valid_for)?;
 
                 Self::deposit_event(RawEvent::AttributeAdded(identity, name, valid_for));
 
@@ -225,20 +223,9 @@ decl_module! {
                 Self::is_owner(&identity, &who)?;
                 ensure!(name.len() <= 64, "invalid attribute name");
 
-                let now_block_number = <system::Module<T>>::block_number();
-
-                let result = Self::attribute_and_id(&identity, &name);
-                match result {
-                    Some((mut attribute, id)) =>  {
-                        attribute.validity = now_block_number.clone();
-                        <AttributeOf<T>>::mutate((identity.clone(), id), |a| *a = attribute);  
-                    },
-                    None => return Err("invalid attribute"),
-                }
+                Self::reset_attribute(who, &identity, &name)?;
                 
-                <UpdatedBy<T>>::insert(&identity, (who, now_block_number.clone(), <timestamp::Module<T>>::now()));
-                
-                Self::deposit_event(RawEvent::AttributeRevoked(identity, name, now_block_number));
+                Self::deposit_event(RawEvent::AttributeRevoked(identity, name, <system::Module<T>>::block_number()));
                 
                 Ok(())
         }
@@ -272,7 +259,7 @@ decl_module! {
             encoded.extend(transaction.value.encode());
             encoded.extend(transaction.validity.encode());
 
-            Self::add_signed_attribute(who, &encoded, &transaction)?;
+            Self::signed_attribute(who, &encoded, &transaction)?;
             Self::deposit_event(RawEvent::TransactionExecuted(transaction));
 
             Ok(())
@@ -360,25 +347,38 @@ impl<T: Trait> Module<T> {
     }
 
     /// Creates a new attribute from a off-chain transaction.
-    fn add_signed_attribute(who: T::AccountId, encoded: &[u8], transaction: &Transaction<T::Signature,T::AccountId>) -> Result {
+    fn signed_attribute(who: T::AccountId, encoded: &[u8], transaction: &Transaction<T::Signature,T::AccountId>) -> Result {
         
         Self::check_signature(&transaction.signature, &encoded, &transaction.signer)?;
-        let blocks: T::BlockNumber = (transaction.validity as u32).into();
-        Self::create_attribute(&transaction.signer, &transaction.name, &transaction.value, &blocks)?;
+        
+        let now_block_number = <system::Module<T>>::block_number();
+        let validity = now_block_number + transaction.validity.into();
 
-        <UpdatedBy<T>>::insert(&transaction.signer, (who, <system::Module<T>>::block_number(), <timestamp::Module<T>>::now()));
-            
+        if validity > now_block_number {
+            Self::create_attribute(who, &transaction.signer, &transaction.name, &transaction.value, &transaction.validity.into())?;
+        
+        } else {
+            Self::reset_attribute(who, &transaction.signer, &transaction.name)?;
+        }
+
         Ok(())
     }
 
-    fn create_attribute(identity: &T::AccountId, name: &Vec<u8>, value: &Vec<u8>, valid_for: &T::BlockNumber) -> Result {
+    fn create_attribute(who: T::AccountId, identity: &T::AccountId, name: &Vec<u8>, value: &Vec<u8>, valid_for: &T::BlockNumber) -> Result {
 
         let now_timestamp = <timestamp::Module<T>>::now();
         let now_block_number = <system::Module<T>>::block_number();
         let nonce = Self::nonce_of((identity.clone(), name.clone()));
         let validity = now_block_number + *valid_for;
-        let id = (identity, name, nonce).using_encoded(<T as system::Trait>::Hashing::hash);
 
+        // Used for first time attribute creation
+        let lookup_nonce = match nonce.clone() {
+            0u64 => 0, // prevents intialization panic
+            _ => nonce.clone() - 1u64,
+        };
+
+        let id = (identity, name, lookup_nonce).using_encoded(<T as system::Trait>::Hashing::hash);
+        
         if <AttributeOf<T>>::exists((identity.clone(), id.clone())){
             Err("attribute exists")
         } else{
@@ -387,13 +387,30 @@ impl<T: Trait> Module<T> {
                                             value: value.clone(),
                                             validity,
                                             creation: now_timestamp,
-                                            nonce: nonce.clone(),
+                                            nonce,
                                 };
 
             <AttributeOf<T>>::insert((identity.clone(), id), new_attribute);
             <AttributeNonce<T>>::mutate((identity.clone(), name.clone()), |n| *n += 1);
+            <UpdatedBy<T>>::insert(identity, (who, <system::Module<T>>::block_number(), <timestamp::Module<T>>::now()));
             
             Ok(())
         }
+    }
+
+    fn reset_attribute(who: T::AccountId, identity: &T::AccountId, name: &Vec<u8>) -> Result {
+
+        let result = Self::attribute_and_id(identity, name);
+        match result {
+            Some((mut attribute, id)) =>  {
+                attribute.validity = <system::Module<T>>::block_number();
+                <AttributeOf<T>>::mutate((identity.clone(), id), |a| *a = attribute);  
+            },
+            None => return Err("invalid attribute"),
+        }
+        
+        <UpdatedBy<T>>::insert(identity, (who, <system::Module<T>>::block_number(), <timestamp::Module<T>>::now()));
+        
+        Ok(())
     }
 }

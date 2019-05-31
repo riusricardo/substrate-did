@@ -97,41 +97,55 @@ mod tests {
 	}
 
     #[test]
-	fn add_signed_attribute_should_work() {
+	fn add_revoke_signed_attribute_should_work() {
         with_externalities(&mut new_test_ext(), || {
-            
-            System::set_block_number(1);
 
             let name: Vec<u8> = String::from("MyAttribute").into();
             let value = [1,2,3].to_vec();
-            let validity = 50;
+            let mut validity: u32 = 50;
 
             let mut encoded = name.encode();
             encoded.extend(value.encode());
             encoded.extend(validity.encode());
 
             let alice_pair = account_pair("Alice");     // Create a new account pair.
-            let alice_sig = alice_pair.sign(&encoded);  // Sign the data with private key.
+            let create_sig = alice_pair.sign(&encoded);  // Sign the data with private key.
             let alice_public = alice_pair.public();     // Get the public key.
 
             let new_transaction = Transaction {
-                signature: alice_sig,
+                signature: create_sig,
                 name: name.clone(),
                 value: value.clone(),
                 validity,
                 signer: alice_public.clone(),
             };
 
-            // Update with signed transaction.
+            // Create with signed transaction.
             assert_ok!(DID::execute(Origin::signed(alice_public.clone()), new_transaction));
             
             // Validate that the attribute exists and has not expired.
-            assert_ok!(DID::valid_attribute(Origin::signed(account_key("None")),alice_public.clone(),name.clone(),value.clone()));
-
-            System::set_block_number(51);            
+            assert_ok!(DID::valid_attribute(Origin::signed(account_key("None")),alice_public.clone(),name.clone(),value.clone()));        
             
-            // Validate that the attribute expired.
-            assert_noop!(DID::valid_attribute(Origin::signed(account_key("None")),alice_public,name,value),"invalid attribute");
+            validity = 0;
+            encoded = name.encode();
+            encoded.extend(value.encode());
+            encoded.extend(validity.encode());
+
+            let revoke_sig = alice_pair.sign(&encoded);
+
+            let revoke_transaction = Transaction {
+                signature: revoke_sig,
+                name: name.clone(),
+                value: value.clone(),
+                validity,
+                signer: alice_public.clone(),
+            };
+
+            // Revoke with signed transaction.
+            assert_ok!(DID::execute(Origin::signed(alice_public.clone()), revoke_transaction));
+
+            // Validate that the attribute was revoked.
+            assert_noop!(DID::valid_attribute(Origin::signed(account_key("None")),alice_public.clone(),name.clone(),value.clone()),"invalid attribute");
 
         })
 	}
