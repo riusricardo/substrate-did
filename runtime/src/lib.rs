@@ -55,8 +55,9 @@ pub type BlockNumber = u64;
 pub type Nonce = u64;
 
 /// Used for the module did in `./did.rs`
-mod did;
+pub mod did;
 mod tests;
+mod mock;
 
 /// Opaque types. These are used by the CLI to instantiate machinery that don't need to know
 /// the specifics of the runtime. They can then be made to be agnostic over specific formats
@@ -187,7 +188,6 @@ impl sudo::Trait for Runtime {
 	type Proposal = Call;
 }
 
-/// Used for the module did in `./did.rs`
 impl did::Trait for Runtime {
 	type Event = Event;
 	type Signature = AccountSignature;
@@ -206,7 +206,6 @@ construct_runtime!(
 		Indices: indices,
 		Balances: balances,
 		Sudo: sudo,
-		// Used for the module did in `./did.rs`
 		DID: did::{Module, Call, Storage, Event<T>},
 	}
 );
