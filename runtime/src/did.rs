@@ -122,34 +122,6 @@ decl_module! {
 
         fn deposit_event<T>() = default;
 
-        /// Validates if a delegate belongs to an identity and it has not expired.
-        pub fn valid_delegate(_origin, identity: T::AccountId, delegate_type: Vec<u8>, delegate: T::AccountId) -> Result {
-                ensure!(delegate_type.len() <= 32, "delegate type cannot exceed 32 bytes");
-                ensure!(
-                    Self::valid_listed_delegate(&identity, &delegate_type, &delegate).is_ok() ||
-                    Self::is_owner(&identity, &delegate).is_ok(),
-                "invalid delegate");
-
-                Ok(())
-        }
-
-        /// Validates if an attribute belongs to an identity and it has not expired.
-        pub fn valid_attribute(_origin, identity: T::AccountId, name: Vec<u8>, value: Vec<u8>) -> Result { 
-                ensure!(name.len() <= 64, "invalid attribute name");
-                let result = Self::attribute_and_id(&identity, &name);
-
-                let (attr, _) = match result {
-                    Some((attr, id)) => (attr, id),
-                    None => return Err("invalid attribute"),
-                };
-
-                if (attr.validity > (<system::Module<T>>::block_number())) && (attr.value == value) {
-                    Ok(())
-                } else {
-                    Err("invalid attribute")
-                }
-        }
-
         /// Transfers ownership of an identity.
         pub fn change_owner(origin, identity: T::AccountId, new_owner: T::AccountId) -> Result {
                 let who = ensure_signed(origin)?;
@@ -307,6 +279,17 @@ impl<T: Trait> Module<T> {
         owner
     }
 
+    /// Validates if a delegate belongs to an identity and it has not expired.
+    pub fn valid_delegate(identity: &T::AccountId, delegate_type: &Vec<u8>, delegate: &T::AccountId) -> Result {
+            ensure!(delegate_type.len() <= 32, "delegate type cannot exceed 32 bytes");
+            ensure!(
+                Self::valid_listed_delegate(identity, delegate_type, delegate).is_ok() ||
+                Self::is_owner(identity, delegate).is_ok(),
+            "invalid delegate");
+
+            Ok(())
+    }
+
     /// Validates that a delegate exists for specific purpose and remains valid at this block high.
     pub fn valid_listed_delegate(identity: &T::AccountId, delegate_type: &Vec<u8>, delegate: &T::AccountId) -> Result {
         ensure!(<DelegateOf<T>>::exists((identity.clone(), delegate_type.clone(), delegate.clone())), "delegate does not exist");
@@ -316,6 +299,23 @@ impl<T: Trait> Module<T> {
             true => Ok(()),
             false => Err("invalid delegate"),
         }
+    }
+
+    /// Validates if an attribute belongs to an identity and it has not expired.
+    pub fn valid_attribute(identity: &T::AccountId, name: &Vec<u8>, value: &Vec<u8>) -> Result { 
+            ensure!(name.len() <= 64, "invalid attribute name");
+            let result = Self::attribute_and_id(identity, name);
+
+            let (attr, _) = match result {
+                Some((attr, id)) => (attr, id),
+                None => return Err("invalid attribute"),
+            };
+
+            if (attr.validity > (<system::Module<T>>::block_number())) && (attr.value == *value) {
+                Ok(())
+            } else {
+                Err("invalid attribute")
+            }
     }
 
     /// Returns the attribute and its hash identifier.
@@ -348,9 +348,21 @@ impl<T: Trait> Module<T> {
         }
     }
 
+    /// Checks if a signature is valid. Used to validate off-chain transactions.
+    pub fn valid_signer(identity: &T::AccountId, signature: &T::Signature, msg: &[u8], signer: &T::AccountId) -> Result {
+        
+        // Predefined delegate type: "sr25519-signer"
+        let delegate_type: Vec<u8> = [115, 114, 50, 53, 53, 49, 57, 45, 115, 105, 103, 110, 101, 114].to_vec();
+        
+        Self::valid_delegate(&identity, &delegate_type, &signer)?; // owner or a delegate signer.
+
+        Self::check_signature(&signature, &msg, &signer)
+
+    }
+
     /// Creates a new attribute from a off-chain transaction.
     fn signed_attribute(who: T::AccountId, encoded: &[u8], transaction: &AttributeTransaction<T::Signature,T::AccountId>) -> Result {
-        Self::check_signature(&transaction.signature, &encoded, &transaction.signer)?;
+        Self::valid_signer(&transaction.identity, &transaction.signature, &encoded, &transaction.signer)?;
         Self::is_owner(&transaction.identity, &transaction.signer)?;
         
         let now_block_number = <system::Module<T>>::block_number();
