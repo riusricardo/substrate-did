@@ -53,11 +53,12 @@ fn validate_delegated_claim() {
         let nakamoto_public = nakamoto_pair.public();           // Get delegate's public key.
 
         // Add signer delegate
-        assert_ok!(DID::add_delegate(Origin::signed(satoshi_public.clone()),
-                                    satoshi_public.clone(),     // owner
-                                    nakamoto_public.clone(),    // new signer delgate
-                                    delegate_type.clone(),      // sr25519-signer
-                                    5)                          // valid for 5 blocks
+        assert_ok!(DID::add_delegate(
+                    Origin::signed(satoshi_public.clone()),
+                    satoshi_public.clone(),     // owner
+                    nakamoto_public.clone(),    // new signer delgate
+                    delegate_type.clone(),      // sr25519-signer
+                    5)                          // valid for 5 blocks
                 );
 
 
@@ -118,7 +119,7 @@ fn add_on_chain_and_revoke_off_chain_attribute() {
         assert_ok!(DID::execute(Origin::signed(alice_public.clone()), revoke_transaction));
 
         // Validate that the attribute was revoked.
-        assert_noop!(DID::valid_attribute(&alice_public, &name, &value),"invalid attribute");
+        assert_noop!(DID::valid_attribute(&alice_public, &name, &[1,2,3].to_vec()),"invalid attribute");
 
     })
 }

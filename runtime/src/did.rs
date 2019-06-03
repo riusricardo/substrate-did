@@ -64,7 +64,7 @@
 
 use support::{decl_event, decl_module, decl_storage, ensure, StorageMap, Parameter, 
             dispatch::{Result, Vec},
-            //traits::{Currency, ExistenceRequirement, WithdrawReason}
+            traits::{Currency, ExistenceRequirement, WithdrawReason}
 };
 use runtime_primitives::{traits::{Hash, Verify}};
 use parity_codec::{Encode, Decode};
@@ -397,12 +397,16 @@ impl<T: Trait> Module<T> {
             Err("attribute exists")
         } else{
             let new_attribute = Attribute {
-                                    name: name.clone(),
-                                    value: value.clone(),
-                                    validity,
-                                    creation: now_timestamp,
-                                    nonce,
-                                };
+                    name: name.clone(),
+                    value: value.clone(),
+                    validity,
+                    creation: now_timestamp,
+                    nonce,
+                };
+
+            let size: u32 = value.len() as u32;
+            let fee = size.into();
+            Self::pay_fee(&who, fee)?;
 
             <AttributeOf<T>>::insert((identity.clone(), id), new_attribute);
             <AttributeNonce<T>>::mutate((identity.clone(), name.clone()), |n| *n += 1);
@@ -425,6 +429,17 @@ impl<T: Trait> Module<T> {
         
         <UpdatedBy<T>>::insert(identity, (who, <system::Module<T>>::block_number(), <timestamp::Module<T>>::now()));
         
+        Ok(())
+    }
+
+    fn pay_fee(who: &T::AccountId, amount: T::Balance) -> Result {
+        let _ = <balances::Module<T> as Currency<_>>::withdraw(
+            who,
+            amount,
+            WithdrawReason::Fee,
+            ExistenceRequirement::KeepAlive
+        )?;
+
         Ok(())
     }
 }
