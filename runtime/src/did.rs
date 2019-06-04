@@ -54,7 +54,7 @@
 //! * `add_attribute` - Creates a new attribute/property as part of an identity. Sets its expiration period.
 //! * `revoke_attribute` - Revokes an attribute/property from an identity. Sets its expiration period to the actual block number.
 //! * `delete_attribute` - Removes an attribute/property from an identity. This attribute/property becomes unavailable.
-//! * `execute` - 
+//! * `execute` - Executes off-chain signed transactions.
 //!
 //! ### Public Functions
 //!
@@ -364,8 +364,8 @@ impl<T: Trait> Module<T> {
     /// Checks if a signature is valid. Used to validate off-chain transactions.
     pub fn valid_signer(identity: &T::AccountId, signature: &T::Signature, msg: &[u8], signer: &T::AccountId) -> Result {
         
-        // Predefined delegate type: "sr25519-signer"
-        let delegate_type: Vec<u8> = [115, 114, 50, 53, 53, 49, 57, 45, 115, 105, 103, 110, 101, 114].to_vec();
+        // Predefined signer delegate type: "Sr25519VerificationKey2018"
+        let delegate_type: Vec<u8> = [83, 114, 50, 53, 53, 49, 57, 86, 101, 114, 105, 102, 105, 99, 97, 116, 105, 111, 110, 75, 101, 121, 50, 48, 49, 56].to_vec();
         
         // Owner or a delegate signer.
         Self::valid_delegate(&identity, &delegate_type, &signer)?;

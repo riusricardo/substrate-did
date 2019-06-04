@@ -44,9 +44,8 @@ fn validate_delegated_claim() {
 
         System::set_block_number(1);
 
-        // Predefined delegate type: "sr25519-signer"
-        // [115, 114, 50, 53, 53, 49, 57, 45, 115, 105, 103, 110, 101, 114]
-        let delegate_type: Vec<u8> = String::from("sr25519-signer").into();
+        // Predefined delegate type: "Sr25519VerificationKey2018"
+        let delegate_type: Vec<u8> = String::from("Sr25519VerificationKey2018").into();
 
         let data: Vec<u8> = String::from("I am Satoshi Nakamoto").into();
 
