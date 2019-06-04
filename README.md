@@ -7,14 +7,14 @@ Your data and identity are your most important assets. Blockchain is the missing
 
 **“ More than 1.1 billion people in the world are unable to prove their identity and therefore lack access to vital services, including healthcare, social protection, education, and finance. ”** -- World Bank, 2017
 
-For those who have a digital presence, it remains rooted in usernames and passwords. The infromation is often isolated and siloed by enterprises to profit from it. The more siloed and numerous our digital identifiers become, the less control we have over them. You may have a digital identity, but you probably don’t have control over it.
+For those who have a digital presence, it remains rooted in usernames and passwords. The infromation is often siloed by enterprises to profit from it. The more siloed and numerous our digital identifiers become, the less control we have over them. You may have a digital identity, but you probably don’t have control over it.
 
 Personal information is regularly shared without awareness and becomes a centralized source of sensitive data for hackers.
 A Google report found that 3.3 billion credentials were stolen during third-party breaches, and 12 million were stolen via phishing attacks. In other words, the system is broken.
 Compliance and regulations, such as the GDPR in Europe, are also driving change for new solutions.
 
 
-## Self-sovereign Identity
+## Self-Sovereign Identity
 
 A decentralized identity or self-sovereign identity is a new approach where no one but you owns or controls the state of your digital identity. 
 
@@ -31,10 +31,15 @@ A digital identity should always be portable, persistent, privacy-protecting, an
 
 _Decentralized Identifiers (DIDs) are a new type of identifier for verifiable, "self-sovereign" digital identity. DIDs are fully under the control of the DID subject, independent from any centralized registry, identity provider, or certificate authority. DIDs are URLs that relate a DID subject to means for trustable interactions with that subject. DIDs resolve to DID Documents — simple documents that describe how to use that specific DID. Each DID Document may contain at least three things: proof purposes, verification methods, and service endpoints. Proof purposes are combined with verification methods to provide mechanisms for proving things. For example, a DID Document can specify that a particular verification method, such as a cryptographic public key or pseudonymous biometric protocol, can be used to verify a proof that was created for the purpose of authentication. Service endpoints enable trusted interactions with the DID controller._  -  [DID - W3C Community Contributor](https://w3c-ccg.github.io/did-spec/)
 
-## DID Runtime Module
+## Substrate DID Runtime Module
 
-## DID Document Examples:
-### Substrate
+The DID module provides functionality for DIDs management. It uses an universal identity registry where all the required data is associated to an address. It enables the possibility to create a portable, persistent,  privacy-protecting, and personal identity.
+
+### DID Document
+_A set of data that describes the subject of a DID, including mechanisms, such as public keys and pseudonymous biometrics, that the DID subject can use to authenticate itself and prove their association with the DID. A DID Document may also contain other attributes or claims describing the subject. These documents are graph-based data structures that are typically expressed using JSON-LD, but may be expressed using other compatible graph-based data formats._ [DID - Documents](https://w3c-ccg.github.io/did-spec/#dfn-did-document)
+
+### Examples:
+#### Substrate
 ``` JSON
 {  
    "@context":"https://w3id.org/did/v1",
@@ -78,7 +83,7 @@ _Decentralized Identifiers (DIDs) are a new type of identifier for verifiable, "
 ```
 
 
-### uPort
+#### uPort
 ``` JSON
 {  
    "@context":"https://w3id.org/did/v1",
@@ -100,7 +105,7 @@ _Decentralized Identifiers (DIDs) are a new type of identifier for verifiable, "
 }
 ```
 
-### 3Box
+#### 3Box
 ``` JSON
 {  
    "@context":"https://w3id.org/did/v1",

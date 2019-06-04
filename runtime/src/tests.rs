@@ -19,19 +19,21 @@ fn validate_claim() {
         
         let value: Vec<u8> = String::from("I am Satoshi Nakamoto").into();
 
-        let satoshi_pair = account_pair("Satoshi");     // Create a new account pair.
-        let satoshi_public = satoshi_pair.public();     // Get the public key.
+        // Create a new account pair and get the public key.
+        let satoshi_pair = account_pair("Satoshi");
+        let satoshi_public = satoshi_pair.public();
 
+        // Encode and sign the claim message.
         let claim = value.encode();
-
-        let satoshi_sig = satoshi_pair.sign(&claim);  // Sign the data with private key.
+        let satoshi_sig = satoshi_pair.sign(&claim);
         
-        // Validate that satoshi signed the message.
+        // Validate that "Satoshi" signed the message.
         assert_ok!(DID::valid_signer(&satoshi_public, &satoshi_sig, &claim, &satoshi_public));
 
-        let bob_public = account_key("Bob"); // Create a different public key.
+        // Create a different public key to test the signature.
+        let bob_public = account_key("Bob");
         
-        // Verify that Bob did not signed the data.
+        // Fail to validate that Bob did signed the message.
         assert_noop!(DID::check_signature(&satoshi_sig, &claim, &bob_public),"invalid signer");
     })
 }
@@ -57,7 +59,7 @@ fn validate_delegated_claim() {
                     Origin::signed(satoshi_public.clone()),
                     satoshi_public.clone(),     // owner
                     nakamoto_public.clone(),    // new signer delgate
-                    delegate_type.clone(),      // sr25519-signer
+                    delegate_type.clone(),      // "sr25519-signer"
                     5)                          // valid for 5 blocks
                 );
 
@@ -85,13 +87,13 @@ fn add_on_chain_and_revoke_off_chain_attribute() {
         let mut value = [1,2,3].to_vec();
         let mut validity: u32 = 1000;
 
-        let alice_pair = account_pair("Alice");     // Create a new account pair.
-        let alice_public = alice_pair.public();     // Get the public key.
+        // Create a new account pair and get the public key.
+        let alice_pair = account_pair("Alice");
+        let alice_public = alice_pair.public();
         
         // Add a new attribute to an identity. Valid until block 1 + 1000.
         assert_ok!(DID::add_attribute(Origin::signed(alice_public.clone()),alice_public.clone(),name.clone(),value.clone(),validity.clone().into()));
 
-        
         // Validate that the attribute exists and has not expired.
         assert_ok!(DID::valid_attribute(&alice_public, &name, &value));        
         
@@ -132,8 +134,9 @@ fn add_off_chain_and_revoke_on_chain_attribute() {
         let value = [1,2,3].to_vec();
         let validity: u32 = 50;
 
-        let alice_pair = account_pair("Alice");     // Create a new account pair.
-        let alice_public = alice_pair.public();     // Get the public key.
+        // Create a new account pair and get the public key.
+        let alice_pair = account_pair("Alice");
+        let alice_public = alice_pair.public(); 
 
         let mut encoded = name.encode();
         encoded.extend(value.encode());
@@ -174,8 +177,9 @@ fn add_and_revoke_off_chain_attribute() {
         let value = [1,2,3].to_vec();
         let mut validity: u32 = 50;
 
-        let alice_pair = account_pair("Alice");     // Create a new account pair.
-        let alice_public = alice_pair.public();     // Get the public key.
+        // Create a new account pair and get the public key.
+        let alice_pair = account_pair("Alice");
+        let alice_public = alice_pair.public();
 
         let mut encoded = name.encode();
         encoded.extend(value.encode());
@@ -199,7 +203,8 @@ fn add_and_revoke_off_chain_attribute() {
         // Validate that the attribute exists and has not expired.
         assert_ok!(DID::valid_attribute(&alice_public, &name, &value));        
         
-        validity = 0;                       // Set validity to 0 in order to revoke the attribute
+        // Set validity to 0 in order to revoke the attribute.
+        validity = 0;                       
         encoded = name.encode();
         encoded.extend(value.encode());
         encoded.extend(validity.encode());

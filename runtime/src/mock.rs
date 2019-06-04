@@ -57,16 +57,19 @@ impl did::Trait for Test {
 pub fn new_test_ext() -> TestExternalities<Blake2Hasher> {
     let mut t = system::GenesisConfig::<Test>::default().build_storage().unwrap().0;
     		t.extend(balances::GenesisConfig::<Test>{
-			transaction_base_fee: 0,
+			transaction_base_fee: 1,
 			transaction_byte_fee: 0,
 			balances: vec![
-                            (account_key("Alice"), 100000), 
-                            (account_key("Bob"), 100000), 
-                            (account_key("Tom"), 100000), 
+                            (account_key("Alice"), 100000),
+                            (account_key("Bob"), 100000),
+                            (account_key("Tom"), 100000),
+                            (account_key("Madera"), 10000000),
+                            (account_key("Mantequilla"), 10000000),
+                            (account_key("Derecha"), 1000),
                             (account_key("Satoshi"), 9999999999999999999)
                         ],
-            existential_deposit: 200,
-			transfer_fee: 1,
+			existential_deposit: 200,
+			transfer_fee: 0,
 			creation_fee: 0,
 			vesting: vec![],
 		}.build_storage().unwrap().0);

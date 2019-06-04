@@ -19,18 +19,21 @@
 //! * Add Attribute
 //! * Revoke Attribute
 //! * Delete Attribute
+//! * Off-Chain Attribute Management
 //!
 //! ### Terminology
 //!
 //! * **DID:** A Decentralized Identifiers/Identity compliant with the DID standard.
-//! The DID is an AccountId with associated attributes/properties.
+//!     The DID is an AccountId with associated attributes/properties.
+//! * **Identity Ownership** By default an identity is owned by itself, meaning whoever controls the account with that key. 
+//!     The owner can be updated to a new key pair.
 //! * **Delegate:** A Delegate recives delegated permissions from a DID for a specific purpose.
 //! * **Attribute:** It is a feature that gives extra information of an identity.
 //! * **Valid Delegate:** The action of obtaining the validity period of the delegate.
 //! * **Valid Attribute:** The action of obtaining the validity period of an attribute.
 //! * **Change Identity Owner:** The process of transferring ownership.
 //! * **Add Delegate:** The process of adding delegate privileges to an identity. 
-//! An identity can assign multiple delegates for specific purposes on its behalf.
+//!     An identity can assign multiple delegates for specific purposes on its behalf.
 //! * **Revoke Delegate:** The process of revoking delegate privileges from an identity.
 //! * **Add Attribute:** The process of assigning a specific identity attribute or feature.
 //! * **Revoke Attribute:** The process of revoking a specific identity attribute or feature.
@@ -40,25 +43,30 @@
 //!
 //! The DID system in Substrate is designed to make the following possible:
 //!
-//! * 
+//! * A decentralized identity or self-sovereign identity is a new approach where no one but you owns or controls the state of your digital identity.
+//! * It enables the possibility to create a portable, persistent,  privacy-protecting, and personal identity.
 //!
 //! ### Dispatchable Functions
 //!
-//! * `valid_delegate` - Validates if a delegate belongs to an identity and it has not expired.
-//! * `valid_attribute` - Validates if an attribute belongs to an identity and it has not expired.
 //! * `change_owner` - Transfers an `identity` represented as an `AccountId` from the owner account (`origin`) to a `target` account.
 //! * `add_delegate` - Creates a new delegate with an expiration period and for a specific purpose.
 //! * `revoke_delegate` - Revokes an identity's delegate by setting its expiration to the current block number.
 //! * `add_attribute` - Creates a new attribute/property as part of an identity. Sets its expiration period.
 //! * `revoke_attribute` - Revokes an attribute/property from an identity. Sets its expiration period to the actual block number.
 //! * `delete_attribute` - Removes an attribute/property from an identity. This attribute/property becomes unavailable.
+//! * `execute` - 
 //!
 //! ### Public Functions
 //!
 //! * `is_owner` - Returns a boolean value. `True` if the `account` owns the `identity`.
 //! * `identity_owner` - Get the account owner of an `identity`.
+//! * `valid_delegate` - Validates if a delegate belongs to an identity and it has not expired.
+//!    The identity owner has all provileges and is considered as delegate with all permissions.
 //! * `valid_listed_delegate` - Returns a boolean value. `True` if the `delegate` belongs the `identity` delegates list.
+//! * `valid_attribute` - Validates if an attribute belongs to an identity and it has not expired.
 //! * `attribute_and_id` - Get the `attribute` and its `hash` identifier.
+//! * `check_signature` - Validates the signer from a signature.
+//! * `valid_signer` - Validates a signature from a valid signer delegate or the owner of an identity.
 //!
 //! *
 
@@ -130,6 +138,7 @@ decl_module! {
                 let now_timestamp = <timestamp::Module<T>>::now();
                 let now_block_number = <system::Module<T>>::block_number();
                 
+                // Update storage to the new owner. Save the update time and block.
                 <OwnerOf<T>>::insert(&identity, &new_owner);
                 <UpdatedBy<T>>::insert(&identity, (who.clone(), now_block_number.clone(), now_timestamp));
                 
@@ -144,7 +153,7 @@ decl_module! {
                 Self::is_owner(&identity, &who)?;
                 ensure!(&who != &delegate,"owner cannot be explicity set as delegate");
                 ensure!(!Self::valid_listed_delegate(&identity, &delegate_type, &delegate).is_ok(), "delegate exists");
-                ensure!(delegate_type.len() <= 32, "delegate type cannot exceed 32 bytes");
+                ensure!(delegate_type.len() <= 64, "delegate type cannot exceed 64 bytes");
 
                 let now_timestamp = <timestamp::Module<T>>::now();
                 let now_block_number = <system::Module<T>>::block_number();
@@ -163,7 +172,7 @@ decl_module! {
                 let who = ensure_signed(origin)?;
                 Self::is_owner(&identity, &who)?;
                 Self::valid_listed_delegate(&identity, &delegate_type, &delegate)?;
-                ensure!(delegate_type.len() <= 32, "delegate type cannot exceed 32 bytes");
+                ensure!(delegate_type.len() <= 64, "delegate type cannot exceed 64 bytes");
 
                 let now_timestamp = <timestamp::Module<T>>::now();
                 let now_block_number = <system::Module<T>>::block_number();
@@ -233,6 +242,7 @@ decl_module! {
             encoded.extend(transaction.validity.encode());
             encoded.extend(transaction.identity.encode());
 
+            // Execute the storage update if the signer is valid.
             Self::signed_attribute(who, &encoded, &transaction)?;
             Self::deposit_event(RawEvent::AttributeTransactionExecuted(transaction));
 
@@ -281,7 +291,7 @@ impl<T: Trait> Module<T> {
 
     /// Validates if a delegate belongs to an identity and it has not expired.
     pub fn valid_delegate(identity: &T::AccountId, delegate_type: &Vec<u8>, delegate: &T::AccountId) -> Result {
-            ensure!(delegate_type.len() <= 32, "delegate type cannot exceed 32 bytes");
+            ensure!(delegate_type.len() <= 64, "delegate type cannot exceed 64 bytes");
             ensure!(
                 Self::valid_listed_delegate(identity, delegate_type, delegate).is_ok() ||
                 Self::is_owner(identity, delegate).is_ok(),
@@ -329,6 +339,9 @@ impl<T: Trait> Module<T> {
             0u64 => 0, // prevents intialization panic
             _ => nonce - 1u64,
         };
+
+        // Looks up for the existing attribute.
+        // Needs to use actual attribute nonce -1.
         let id = (identity.clone(), name.clone(), lookup_nonce ).using_encoded(<T as system::Trait>::Hashing::hash);
         
         if <AttributeOf<T>>::exists((identity.clone(), id.clone())){
@@ -354,20 +367,24 @@ impl<T: Trait> Module<T> {
         // Predefined delegate type: "sr25519-signer"
         let delegate_type: Vec<u8> = [115, 114, 50, 53, 53, 49, 57, 45, 115, 105, 103, 110, 101, 114].to_vec();
         
-        Self::valid_delegate(&identity, &delegate_type, &signer)?; // owner or a delegate signer.
-
+        // Owner or a delegate signer.
+        Self::valid_delegate(&identity, &delegate_type, &signer)?;
         Self::check_signature(&signature, &msg, &signer)
-
     }
 
     /// Creates a new attribute from a off-chain transaction.
     fn signed_attribute(who: T::AccountId, encoded: &[u8], transaction: &AttributeTransaction<T::Signature,T::AccountId>) -> Result {
+        
+        // Verify that the Data was signer by the owner or a not expired signer delegate.
         Self::valid_signer(&transaction.identity, &transaction.signature, &encoded, &transaction.signer)?;
         Self::is_owner(&transaction.identity, &transaction.signer)?;
-        
+        ensure!(&transaction.name.len() <= &64, "invalid attribute name");
+
         let now_block_number = <system::Module<T>>::block_number();
         let validity = now_block_number + transaction.validity.into();
 
+        // If validity was set to 0 in the transaction, 
+        // it will set the attribute latest valid block to the actual block.
         if validity > now_block_number {
             Self::create_attribute(who, &transaction.identity, &transaction.name, &transaction.value, &transaction.validity.into())?;
         
@@ -378,6 +395,7 @@ impl<T: Trait> Module<T> {
         Ok(())
     }
 
+    /// Adds a new attribute to an identity and colects the storage fee.
     fn create_attribute(who: T::AccountId, identity: &T::AccountId, name: &Vec<u8>, value: &Vec<u8>, valid_for: &T::BlockNumber) -> Result {
 
         let now_timestamp = <timestamp::Module<T>>::now();
@@ -404,8 +422,10 @@ impl<T: Trait> Module<T> {
                     nonce,
                 };
 
+            // Basic fee system. The account that adds the atribute pays the fee.
+            // It should be paid by the owner or by the external account that executed the signed transaction.
             let size: u32 = value.len() as u32;
-            let fee = size.into();
+            let fee: T::Balance = (size/1024u32).into();
             Self::pay_fee(&who, fee)?;
 
             <AttributeOf<T>>::insert((identity.clone(), id), new_attribute);
@@ -416,8 +436,10 @@ impl<T: Trait> Module<T> {
         }
     }
 
+    /// Updates the attribute validity to make it expire and invalid.
     fn reset_attribute(who: T::AccountId, identity: &T::AccountId, name: &Vec<u8>) -> Result {
 
+        // If the attribute exists, the latest valid block is set to the current block.
         let result = Self::attribute_and_id(identity, name);
         match result {
             Some((mut attribute, id)) =>  {
@@ -427,11 +449,13 @@ impl<T: Trait> Module<T> {
             None => return Err("invalid attribute"),
         }
         
+        // Keep track of the updates.
         <UpdatedBy<T>>::insert(identity, (who, <system::Module<T>>::block_number(), <timestamp::Module<T>>::now()));
         
         Ok(())
     }
 
+    /// Takes a fee from the balance of an account.
     fn pay_fee(who: &T::AccountId, amount: T::Balance) -> Result {
         let _ = <balances::Module<T> as Currency<_>>::withdraw(
             who,
