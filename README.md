@@ -7,7 +7,7 @@ Your data and identity are your most important assets. Blockchain is the missing
 
 **“ More than 1.1 billion people in the world are unable to prove their identity and therefore lack access to vital services, including healthcare, social protection, education, and finance. ”** -- World Bank, 2017
 
-For those who have a digital presence, it remains rooted in usernames and passwords. The infromation is often siloed by enterprises to profit from it. The more siloed and numerous our digital identifiers become, the less control we have over them. You may have a digital identity, but you probably don’t have control over it.
+For those who have a digital presence, it remains rooted in usernames and passwords. The information is often siloed by enterprises to profit from it. The more siloed and numerous our digital identifiers become, the less control we have over them. You may have a digital identity, but you probably don’t have control over it.
 
 Personal information is regularly shared without awareness and becomes a centralized source of sensitive data for hackers.
 A Google report found that 3.3 billion credentials were stolen during third-party breaches, and 12 million were stolen via phishing attacks. In other words, the system is broken.
@@ -33,12 +33,15 @@ _Decentralized Identifiers (DIDs) are a new type of identifier for verifiable, "
 
 ## Substrate DID Runtime Module
 
-The DID module provides functionality for DIDs management. It uses an universal identity registry where all the required data is associated to an address. It enables the possibility to create a portable, persistent,  privacy-protecting, and personal identity.
+The DID module provides functionality for DIDs management. It uses a universal identity registry where all the required data is associated with an address. It enables the possibility to create a portable, persistent,  privacy-protecting, and personal identity.
 
 ### DID Document
 _A set of data that describes the subject of a DID, including mechanisms, such as public keys and pseudonymous biometrics, that the DID subject can use to authenticate itself and prove their association with the DID. A DID Document may also contain other attributes or claims describing the subject. These documents are graph-based data structures that are typically expressed using JSON-LD, but may be expressed using other compatible graph-based data formats._ [DID - Documents](https://w3c-ccg.github.io/did-spec/#dfn-did-document)
 
-### Examples:
+**To create a DID-Document, a *DID resolver* needs to get all the information from the registry and validate the credentials.** _DID resolvers are a separate component in the DID stack._
+
+### DID document examples for compatibility between different projects:
+
 #### Substrate
 ``` JSON
 {  
