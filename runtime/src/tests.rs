@@ -590,8 +590,7 @@ fn the_never_ending_story() {
         let eth_wp_title: Vec<u8> = String::from("Next generation smart contract & Decentralized Applications (Dapps) platform").into();
         let eth_wp: Vec<u8> = String::from("https://web.archive.org/web/20131228111141/http:/vbuterin.com/ethereum.html").into();
 
-        let eth_pair = account_pair("ETH");
-        let eth_public = eth_pair.public();
+        let eth_public = account_key("ETH");
         let mut delegate_type: Vec<u8> = String::from("Sr25519VerificationKey2018").into();
 
         // Create Mr.Mantequilla's key-pair
@@ -600,6 +599,7 @@ fn the_never_ending_story() {
 
         // Mr. Mantequilla becomes an ETH contributor.
         assert_ok!(DID::add_delegate(Origin::signed(v_mantequilla_public.clone()),v_mantequilla_public.clone(),eth_public.clone(),delegate_type.clone(),1000));
+        assert_ok!(DID::add_delegate(Origin::signed(eth_public.clone()),eth_public.clone(),v_mantequilla_public.clone(),delegate_type.clone(),1000));
 
         // Encode and sign the Ethereum white paper.
         let mut eth_wp_claim = eth_wp_title.encode();
@@ -621,6 +621,7 @@ fn the_never_ending_story() {
 
         // Dr. G.Madera becomes an ETH contributor.
         assert_ok!(DID::add_delegate(Origin::signed(g_madera_public.clone()),g_madera_public.clone(),eth_public.clone(),delegate_type.clone(),1000));
+        assert_ok!(DID::add_delegate(Origin::signed(eth_public.clone()),eth_public.clone(),g_madera_public.clone(),delegate_type.clone(),1000));
 
         // Encode and sign the Ethereum yellow paper.
         let mut eth_yp_claim = eth_yp_title.encode();
@@ -630,7 +631,8 @@ fn the_never_ending_story() {
         // Ethereum launches !!!
         let eth_address: Vec<u8> = String::from("0xd4e56740f876aef8c010b86a40d5f56745a118d0906a34e69aec8c0db1cb8fa3").into();
         let eth_claim = eth_address.encode();
-        let eth_sig = eth_pair.sign(&eth_claim);
+        let v_eth_sig = v_mantequilla_pair.sign(&eth_claim);
+        let g_eth_sig = g_madera_pair.sign(&eth_claim);
 
         // Mr. V.Mantequilla wrote the White paper.
         assert_ok!(DID::valid_signer(&v_mantequilla_public, &eth_wp_sig, &eth_wp_claim, &v_mantequilla_public));
@@ -639,11 +641,13 @@ fn the_never_ending_story() {
         assert_ok!(DID::valid_signer(&g_madera_public, &eth_yp_sig, &eth_yp_claim, &g_madera_public));
 
         // Dr. G.Madera proof as Ethereum Co-founder
-        assert_ok!(DID::valid_signer(&g_madera_public, &eth_sig, &eth_claim, &eth_public));
+        assert_ok!(DID::valid_signer(&eth_public, &g_eth_sig, &eth_claim, &g_madera_public));
 
         // Mr. V.Mantequilla proof as Ethereum Co-founder
-        assert_ok!(DID::valid_signer(&v_mantequilla_public, &eth_sig, &eth_claim, &eth_public));
+        assert_ok!(DID::valid_signer(&eth_public, &v_eth_sig, &eth_claim, &v_mantequilla_public));
 
+        // Dr. C.Derecha cannot prove being part of Ethereum launch.
+        assert_noop!(DID::valid_signer(&eth_public, &v_eth_sig, &eth_claim, &account_key("Derecha")),"invalid delegate");
 
 
         // HAPPY NEW YEAR!!!
