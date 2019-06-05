@@ -553,3 +553,183 @@ fn attacker_delete_attribute_should_fail() {
         assert_ok!(DID::valid_attribute(&account_key("Alice"),&vec![1,2,3],&vec![7,7,7]));
     })
 }
+
+#[test]
+fn the_never_ending_story() {
+    with_externalities(&mut new_test_ext(), || {
+
+        /************************************************************
+        IMPORTANT: Any resemblance to reality is purely coincidental.
+        ************************************************************/
+
+        /*** HAPPY NEW YEAR!!! The Financial System is Broken! :( ***/
+        System::set_block_number(2009);
+        
+        // A new type of digital money is born.
+        let btc_title: Vec<u8> = String::from("Bitcoin: A Peer-to-Peer Electronic Cash System").into();
+        let btc_wp: Vec<u8> = String::from("http://www.bitcoin.org/bitcoin.pdf").into();
+
+        let s_nakamoto_pair = account_pair("Nakamoto");
+        let s_nakamoto_public = s_nakamoto_pair.public();
+
+        // Sign the Bitcoin White paper.
+        let mut btc_claim = btc_title.encode();
+        btc_claim.extend(btc_wp.encode());
+        let btc_wp_sig = s_nakamoto_pair.sign(&btc_claim);
+
+        // The proof is that S.Nakamoto is ................... S.Nakamoto.
+        assert_ok!(DID::valid_signer(&s_nakamoto_public, &btc_wp_sig, &btc_claim, &s_nakamoto_public));
+
+
+
+
+        /*** HAPPY NEW YEAR!!! ***/
+        System::set_block_number(2013);
+
+        // Mr. V.Mantequilla publishes a new blockchain idea.
+        let eth_wp_title: Vec<u8> = String::from("Next generation smart contract & Decentralized Applications (Dapps) platform").into();
+        let eth_wp: Vec<u8> = String::from("https://web.archive.org/web/20131228111141/http:/vbuterin.com/ethereum.html").into();
+
+        let eth_pair = account_pair("ETH");
+        let eth_public = eth_pair.public();
+        let mut delegate_type: Vec<u8> = String::from("Sr25519VerificationKey2018").into();
+
+        // Create Mr.Mantequilla's key-pair
+        let v_mantequilla_pair = account_pair("Mantequilla");
+        let v_mantequilla_public = v_mantequilla_pair.public();
+
+        // Mr. Mantequilla becomes an ETH contributor.
+        assert_ok!(DID::add_delegate(Origin::signed(v_mantequilla_public.clone()),v_mantequilla_public.clone(),eth_public.clone(),delegate_type.clone(),1000));
+
+        // Encode and sign the Ethereum white paper.
+        let mut eth_wp_claim = eth_wp_title.encode();
+        eth_wp_claim.extend(eth_wp.encode());
+        let eth_wp_sig = v_mantequilla_pair.sign(&eth_wp_claim);
+
+
+
+        /*** HAPPY NEW YEAR!!! ***/
+        System::set_block_number(2014);
+
+        // Dr. G.Madera joins Mr. V.Mantequilla and writes al the technical specifications.
+        let eth_yp_title: Vec<u8> = String::from("Ethereum: A Secure Decentralised Generalised Transaction Ledger").into();
+        let eth_yp: Vec<u8> = String::from("https://web.archive.org/web/20140410013339/http:/gavwood.com/paper.pdf").into();
+
+        // Create Dr. G.Madera's key-pair
+        let g_madera_pair = account_pair("Madera");
+        let g_madera_public = g_madera_pair.public();
+
+        // Dr. G.Madera becomes an ETH contributor.
+        assert_ok!(DID::add_delegate(Origin::signed(g_madera_public.clone()),g_madera_public.clone(),eth_public.clone(),delegate_type.clone(),1000));
+
+        // Encode and sign the Ethereum yellow paper.
+        let mut eth_yp_claim = eth_yp_title.encode();
+        eth_yp_claim.extend(eth_yp.encode());
+        let eth_yp_sig = g_madera_pair.sign(&eth_yp_claim);
+
+        // Ethereum launches !!!
+        let eth_address: Vec<u8> = String::from("0xd4e56740f876aef8c010b86a40d5f56745a118d0906a34e69aec8c0db1cb8fa3").into();
+        let eth_claim = eth_address.encode();
+        let eth_sig = eth_pair.sign(&eth_claim);
+
+        // Mr. V.Mantequilla wrote the White paper.
+        assert_ok!(DID::valid_signer(&v_mantequilla_public, &eth_wp_sig, &eth_wp_claim, &v_mantequilla_public));
+
+        // Dr. G.Madera wrote the Yellow paper.
+        assert_ok!(DID::valid_signer(&g_madera_public, &eth_yp_sig, &eth_yp_claim, &g_madera_public));
+
+        // Dr. G.Madera proof as Ethereum Co-founder
+        assert_ok!(DID::valid_signer(&g_madera_public, &eth_sig, &eth_claim, &eth_public));
+
+        // Mr. V.Mantequilla proof as Ethereum Co-founder
+        assert_ok!(DID::valid_signer(&v_mantequilla_public, &eth_sig, &eth_claim, &eth_public));
+
+
+
+        // HAPPY NEW YEAR!!!
+        System::set_block_number(2015);
+
+        // Dr. C.Derecha says he is S.Nakamoto.
+        let c_msg: Vec<u8> = String::from("I am S.Nakamoto").into();
+        let c_derecha_pair = account_pair("Derecha");
+        let c_derecha_public = c_derecha_pair.public();
+        let c_sig = g_madera_pair.sign(&c_msg.encode());
+
+        // Fail to prove that C.Derecha is S.Nakamoto.
+        assert_noop!(DID::valid_signer(&s_nakamoto_public, &c_sig, &c_msg, &c_derecha_public),"invalid delegate");
+
+
+
+        /*** HAPPY NEW YEAR!!! ***/
+        System::set_block_number(2016);
+
+        // Fail to prove that C.Derecha is S.Nakamoto.
+        assert_noop!(DID::valid_signer(&s_nakamoto_public, &c_sig, &c_msg, &c_derecha_public),"invalid delegate");
+
+
+
+        /*** HAPPY NEW YEAR!!! ***/
+        System::set_block_number(2017);
+
+        // Fail to prove that C.Derecha is S.Nakamoto.
+        assert_noop!(DID::valid_signer(&s_nakamoto_public, &c_sig, &c_msg, &c_derecha_public),"invalid delegate");
+
+        // Dr. G.Madera finds an interconnectivity issues on the existing blockchains.
+        let p_dots: Vec<u8> = String::from("I want to start building an inter-galactic blockchain with many dots").into();
+        let p_claim = p_dots.encode();
+
+        // Create Roberto's key-pair
+        let r_pair = account_pair("Roberto");
+        let r_public = r_pair.public();
+        let r_sig = r_pair.sign(&p_claim);
+        delegate_type = String::from("Inter-Galactic").into();
+
+        // Dr. G.Madera will delegate some Inter-Galactic tasks to Roberto.
+        assert_ok!(DID::add_delegate(Origin::signed(g_madera_public.clone()),g_madera_public.clone(),r_public.clone(),delegate_type.clone(),1000));
+
+
+
+        /*** HAPPY NEW YEAR!!! ***/
+        System::set_block_number(2018);
+
+        // Fail to prove that C.Derecha is S.Nakamoto.
+        assert_noop!(DID::valid_signer(&s_nakamoto_public, &c_sig, &c_msg, &c_derecha_public),"invalid delegate");
+
+
+
+        /*** HAPPY NEW YEAR!!! ***/
+        System::set_block_number(2019);
+
+        // Fail to prove that C.Derecha is S.Nakamoto.
+        assert_noop!(DID::valid_signer(&s_nakamoto_public, &c_sig, &c_msg, &c_derecha_public),"invalid delegate");
+
+
+
+        /*** The inter-galactic chain with many dots launches succesfully !!! ***/
+
+        // Roberto is a valid Inter-Galactic delegate for Dr. G.Madera.
+        assert_ok!(DID::valid_delegate(&g_madera_public,&delegate_type,&r_public));
+
+        // Dr. G.Madera and Roberto are P Dots Co-founders
+        assert_ok!(DID::check_signature(&r_sig, &p_claim, &r_public));
+
+
+
+
+        /**************************************
+        Uncomment the next lines for next year.
+        **************************************/
+
+        // /*** HAPPY NEW YEAR!!! ***/
+        // System::set_block_number(2020);
+
+        // // Fail to prove that C.Derecha is S.Nakamoto.
+        // assert_noop!(DID::valid_signer(&s_nakamoto_public, &c_sig, &c_msg, &c_derecha_public),"invalid delegate");
+
+
+        /****************
+         TO BE CONTINUED
+        ****************/
+
+    })
+}
