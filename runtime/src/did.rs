@@ -422,7 +422,7 @@ impl<T: Trait> Module<T> {
                     nonce,
                 };
 
-            // Basic fee system. The account that adds the atribute pays the fee.
+            // Basic fee system. The account that adds the attribute pays the fee.
             // It should be paid by the owner or by the external account that executed the signed transaction.
             let size: u32 = value.len() as u32;
             let fee: T::Balance = (size/1024u32).into();
