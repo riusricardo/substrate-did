@@ -65,8 +65,10 @@ pub fn new_test_ext() -> TestExternalities<Blake2Hasher> {
                             (account_key("Tom"), 100000),
                             (account_key("Madera"), 10000000),
                             (account_key("Mantequilla"), 10000000),
+                            (account_key("Roberto"), 10000000),
                             (account_key("Derecha"), 1000),
-                            (account_key("Satoshi"), 9999999999999999999)
+                            (account_key("Satoshi"), 999999999999999),
+                            (account_key("Nakamoto"), 999999999999999)
                         ],
 			existential_deposit: 200,
 			transfer_fee: 0,

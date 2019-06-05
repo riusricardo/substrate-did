@@ -31,10 +31,10 @@ fn validate_claim() {
         assert_ok!(DID::valid_signer(&satoshi_public, &satoshi_sig, &claim, &satoshi_public));
 
         // Create a different public key to test the signature.
-        let bob_public = account_key("Bob");
+        let bobtc_public = account_key("Bob");
         
-        // Fail to validate that Bob did signed the message.
-        assert_noop!(DID::check_signature(&satoshi_sig, &claim, &bob_public),"invalid signer");
+        // Fail to validate that Bob signed the message.
+        assert_noop!(DID::check_signature(&satoshi_sig, &claim, &bobtc_public),"invalid signer");
     })
 }
 
@@ -58,13 +58,13 @@ fn validate_delegated_claim() {
                     Origin::signed(satoshi_public.clone()),
                     satoshi_public.clone(),     // owner
                     nakamoto_public.clone(),    // new signer delgate
-                    delegate_type.clone(),      // "sr25519-signer"
+                    delegate_type.clone(),      // "Sr25519VerificationKey2018"
                     5)                          // valid for 5 blocks
                 );
 
 
         let claim = data.encode();
-        let satoshi_sig = nakamoto_pair.sign(&claim);   // Sign the data with delegates private key.
+        let satoshi_sig = nakamoto_pair.sign(&claim);   // Sign the data with delegate private key.
 
         System::set_block_number(3);
 
@@ -288,7 +288,7 @@ fn owner_is_a_valid_delegate() {
 
         System::set_block_number(2000);
 
-        // Transfer identity ownership to AccountId-2
+        // Transfer identity ownership to Bob
         assert_ok!(DID::change_owner(Origin::signed(account_key("Alice")), account_key("Alice"), account_key("Bob")));
 
         // Previous identity owner should be an invalid delegate
@@ -304,20 +304,36 @@ fn owner_is_a_valid_delegate() {
 fn add_new_delegate() {
     with_externalities(&mut new_test_ext(), || {
 
-        // Should fail to explicity set owner(AccountId-1) in the delegates list
+        // Should fail to explicity set owner(Alice) in the delegates list
         assert_noop!(DID::add_delegate(Origin::signed(account_key("Alice")),account_key("Alice"),account_key("Alice"),vec![7,7,7],20),"owner cannot be explicity set as delegate");
 
-        // AccountId-5 is an invalid delegate previous to adding it
+        // Tom is an invalid delegate previous to adding it
         assert_noop!(DID::valid_delegate(&account_key("Alice"),&vec![7,7,7],&account_key("Tom")),"invalid delegate");
 
-        // Add AccountId-5 as delegate of AccountId-1 for a period of 20 blocks
+        // Add Tom as delegate of Alice for a period of 20 blocks
         assert_ok!(DID::add_delegate(Origin::signed(account_key("Alice")),account_key("Alice"),account_key("Tom"),vec![7,7,7],20));
 
-        // AccountId-5 is a valid for a specified type
+        // Tom is a valid for a specified type
         assert_ok!(DID::valid_delegate(&account_key("Alice"),&vec![7,7,7],&account_key("Tom")));
 
-        // AccountId-5 is an invalid delegate for a different type
+        // Tom is an invalid delegate for a different type
         assert_noop!(DID::valid_delegate(&account_key("Alice"),&vec![8,8,8],&account_key("Tom")),"invalid delegate");
+
+    })
+}
+
+#[test]
+fn attacker_add_new_delegate_should_fail() {
+    with_externalities(&mut new_test_ext(), || {
+
+        // BadBoy is an invalid delegate previous to attack.
+        assert_noop!(DID::valid_delegate(&account_key("Alice"),&vec![7,7,7],&account_key("BadBoy")),"invalid delegate");
+
+        // Attacker should fail to add delegate.
+        assert_noop!(DID::add_delegate(Origin::signed(account_key("BadBoy")),account_key("Alice"),account_key("BadBoy"),vec![7,7,7],20),"invalid owner");
+
+        // BadBoy is an invalid delegate.
+        assert_noop!(DID::valid_delegate(&account_key("Alice"),&vec![7,7,7],&account_key("BadBoy")),"invalid delegate");
 
     })
 }
@@ -328,25 +344,25 @@ fn renew_delegate() {
 
         System::set_block_number(1);
 
-        // Add AccountId-5 as delegate of AccountId-1 for a period of 3 blocks
+        // Add Tom as delegate of Alice for a period of 3 blocks
         assert_ok!(DID::add_delegate(Origin::signed(account_key("Alice")),account_key("Alice"),account_key("Tom"),vec![7,7,7],3));
 
         System::set_block_number(3);
         
-        // AccountId-5 is a valid specific type delegate
+        // Tom is a valid specific type delegate
         assert_ok!(DID::valid_delegate(&account_key("Alice"),&vec![7,7,7],&account_key("Tom")));
 
         System::set_block_number(4);
 
-        // AccountId-5 is an invalid delegate after expiration
+        // Tom is an invalid delegate after expiration
         assert_noop!(DID::valid_delegate(&account_key("Alice"),&vec![7,7,7],&account_key("Tom")),"invalid delegate");
 
-        // Add AccountId-5 as delegate of AccountId-1 for a period of 3 blocks
+        // Add Tom as delegate of Alice for a period of 3 blocks
         assert_ok!(DID::add_delegate(Origin::signed(account_key("Alice")),account_key("Alice"),account_key("Tom"),vec![7,7,7],3));
 
         System::set_block_number(6);
         
-        // AccountId-5 is a valid specific type delegate
+        // Tom is a valid specific type delegate
         assert_ok!(DID::valid_delegate(&account_key("Alice"),&vec![7,7,7],&account_key("Tom")));
 
     })
@@ -358,17 +374,17 @@ fn identity_delegate_should_expire() {
 
         System::set_block_number(1);
 
-        // Add AccountId-5 as delegate of AccountId-1 for a period of 3 blocks
+        // Add Tom as delegate of Alice for a period of 3 blocks
         assert_ok!(DID::add_delegate(Origin::signed(account_key("Alice")),account_key("Alice"),account_key("Tom"),vec![7,7,7],3));
 
         System::set_block_number(3);
         
-        // AccountId-5 is a valid specific type delegate
+        // Tom is a valid specific type delegate
         assert_ok!(DID::valid_delegate(&account_key("Alice"),&vec![7,7,7],&account_key("Tom")));
 
         System::set_block_number(4);
 
-        // AccountId-5 is an invalid delegate after expiration
+        // Tom is an invalid delegate after expiration
         assert_noop!(DID::valid_delegate(&account_key("Alice"),&vec![7,7,7],&account_key("Tom")),"invalid delegate");
 
     })
@@ -380,15 +396,15 @@ fn revoke_identity_delegate() {
 
         System::set_block_number(1);
 
-        // Add AccountId-5 as delegate of AccountId-1 for a period of 1000 blocks
+        // Add Tom as delegate of Alice for a period of 1000 blocks
         assert_ok!(DID::add_delegate(Origin::signed(account_key("Alice")),account_key("Alice"),account_key("Tom"),vec![7,7,7],1000));
 
         System::set_block_number(50);
         
-        // AccountId-5 is a valid specific type delegate
+        // Tom is a valid specific type delegate
         assert_ok!(DID::valid_delegate(&account_key("Alice"),&vec![7,7,7],&account_key("Tom")));
 
-        // AccountId-5 is a revoked delegate from AccountId-1
+        // Tom is a revoked delegate from Alice
         assert_ok!(DID::revoke_delegate(Origin::signed(account_key("Alice")),account_key("Alice"),vec![7,7,7],account_key("Tom")));
 
         // Delegate max valid block is current block
@@ -396,7 +412,7 @@ fn revoke_identity_delegate() {
 
         System::set_block_number(51);
 
-        // AccountId-5 is an invalid delegate after revocation
+        // Tom is an invalid delegate after revocation
         assert_noop!(DID::valid_delegate(&account_key("Alice"),&vec![7,7,7],&account_key("Tom")),"invalid delegate");
 
     })
@@ -434,6 +450,23 @@ fn add_on_chain_attribute() {
 }
 
 #[test]
+fn attacker_add_attribute_should_fail() {
+    with_externalities(&mut new_test_ext(), || {
+
+        System::set_block_number(1);
+        
+        // Attacker tries to add a new attribute to an identity.
+        assert_noop!(DID::add_attribute(Origin::signed(account_key("BadBoy")),account_key("Alice"),vec![1,2,3],vec![7,7,7],1000),"invalid owner");
+        
+        System::set_block_number(2);
+
+        // Validate that the attribute exists and has not expired.
+        assert_noop!(DID::valid_attribute(&account_key("Alice"),&vec![1,2,3],&vec![7,7,7]),"invalid attribute");
+
+    })
+}
+
+#[test]
 fn revoke_on_chain_attribute() {
     with_externalities(&mut new_test_ext(), || {
 
@@ -456,6 +489,28 @@ fn revoke_on_chain_attribute() {
 }
 
 #[test]
+fn attacker_revoke_attribute_should_fail() {
+    with_externalities(&mut new_test_ext(), || {
+
+        System::set_block_number(50);
+        
+        // Add a new attribute to an identity on block 50 for a validity of 50 + 100 blocks
+        // Valid until block 150.
+        assert_ok!(DID::add_attribute(Origin::signed(account_key("Alice")),account_key("Alice"),vec![1,2,3],vec![7,7,7],100));
+        
+        System::set_block_number(110);
+
+        // Attacker should fail to revoke external attribute.
+        assert_noop!(DID::revoke_attribute(Origin::signed(account_key("BadBoy")),account_key("Alice"),vec![1,2,3]),"invalid owner");
+
+        System::set_block_number(111);
+
+        // Attribute should be valid and continue existing. 
+        assert_ok!(DID::valid_attribute(&account_key("Alice"),&vec![1,2,3],&vec![7,7,7]));
+    })
+}
+
+#[test]
 fn delete_attribute() {
     with_externalities(&mut new_test_ext(), || {
 
@@ -474,5 +529,27 @@ fn delete_attribute() {
 
         // Attribute becomes unavailable.
         assert_noop!(DID::valid_attribute(&account_key("Alice"),&vec![1,2,3],&vec![7,7,7]),"invalid attribute");
+    })
+}
+
+#[test]
+fn attacker_delete_attribute_should_fail() {
+    with_externalities(&mut new_test_ext(), || {
+
+        System::set_block_number(50);
+
+        // Add a new attribute to an identity on block 50 for a validity of 50 + 100 blocks
+        // Valid until block 150.
+        assert_ok!(DID::add_attribute(Origin::signed(account_key("Alice")),account_key("Alice"),vec![1,2,3],vec![7,7,7],100));
+        
+        System::set_block_number(110);
+
+        // Attacker should fail to delete attribute.
+        assert_noop!(DID::delete_attribute(Origin::signed(account_key("BadBoy")),account_key("Alice"),vec![1,2,3]),"invalid owner");
+
+        System::set_block_number(120);
+
+        // Attribute still exists.
+        assert_ok!(DID::valid_attribute(&account_key("Alice"),&vec![1,2,3],&vec![7,7,7]));
     })
 }
