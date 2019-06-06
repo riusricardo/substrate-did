@@ -5,7 +5,7 @@
 #![recursion_limit="256"]
 
 #[cfg(feature = "std")]
-use serde_derive::{Serialize, Deserialize};
+use serde::{Serialize, Deserialize};
 use parity_codec::{Encode, Decode};
 use rstd::prelude::*;
 #[cfg(feature = "std")]
@@ -55,7 +55,9 @@ pub type BlockNumber = u64;
 pub type Nonce = u64;
 
 /// Used for the module did in `./did.rs`
-mod did;
+pub mod did;
+mod tests;
+mod mock;
 
 /// Opaque types. These are used by the CLI to instantiate machinery that don't need to know
 /// the specifics of the runtime. They can then be made to be agnostic over specific formats
@@ -94,8 +96,8 @@ pub const VERSION: RuntimeVersion = RuntimeVersion {
 	spec_name: create_runtime_str!("identitychain"),
 	impl_name: create_runtime_str!("identitychain"),
 	authoring_version: 3,
-	spec_version: 3,
-	impl_version: 0,
+	spec_version: 4,
+	impl_version: 4,
 	apis: RUNTIME_API_VERSIONS,
 };
 
@@ -186,9 +188,9 @@ impl sudo::Trait for Runtime {
 	type Proposal = Call;
 }
 
-/// Used for the module did in `./did.rs`
 impl did::Trait for Runtime {
 	type Event = Event;
+	type Signature = AccountSignature;
 }
 
 construct_runtime!(
@@ -204,7 +206,6 @@ construct_runtime!(
 		Indices: indices,
 		Balances: balances,
 		Sudo: sudo,
-		// Used for the module DID in `./did.rs`
 		DID: did::{Module, Call, Storage, Event<T>},
 	}
 );
