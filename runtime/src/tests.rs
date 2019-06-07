@@ -248,8 +248,11 @@ fn transfer_identity_ownership() {
         // Verify new owner
         assert_ok!(DID::is_owner(&account_key("Alice"),&account_key("Bob")));
 
-        // Get the new owner of an identity
-        assert_eq!(DID::identity_owner(&account_key("Alice")),account_key("Bob"));
+        // Transfer again identity ownership by updating
+        assert_ok!(DID::change_owner(Origin::signed(account_key("Bob")), account_key("Alice"), account_key("Tom")));
+
+        // Get the new owner of an identity.
+        assert_eq!(DID::identity_owner(&account_key("Alice")),account_key("Tom"));
     })
 }
 
@@ -599,7 +602,6 @@ fn the_never_ending_story() {
 
         // Mr. Mantequilla becomes an ETH contributor.
         assert_ok!(DID::add_delegate(Origin::signed(v_mantequilla_public.clone()),v_mantequilla_public.clone(),eth_public.clone(),delegate_type.clone(),1000));
-        assert_ok!(DID::add_delegate(Origin::signed(eth_public.clone()),eth_public.clone(),v_mantequilla_public.clone(),delegate_type.clone(),1000));
 
         // Encode and sign the Ethereum white paper.
         let mut eth_wp_claim = eth_wp_title.encode();
@@ -621,7 +623,6 @@ fn the_never_ending_story() {
 
         // Dr. G.Madera becomes an ETH contributor.
         assert_ok!(DID::add_delegate(Origin::signed(g_madera_public.clone()),g_madera_public.clone(),eth_public.clone(),delegate_type.clone(),1000));
-        assert_ok!(DID::add_delegate(Origin::signed(eth_public.clone()),eth_public.clone(),g_madera_public.clone(),delegate_type.clone(),1000));
 
         // Encode and sign the Ethereum yellow paper.
         let mut eth_yp_claim = eth_yp_title.encode();
@@ -631,6 +632,10 @@ fn the_never_ending_story() {
         // Ethereum launches !!!
         let eth_address: Vec<u8> = String::from("0xd4e56740f876aef8c010b86a40d5f56745a118d0906a34e69aec8c0db1cb8fa3").into();
         let eth_claim = eth_address.encode();
+        // Ethereum delegates
+        assert_ok!(DID::add_delegate(Origin::signed(eth_public.clone()),eth_public.clone(),g_madera_public.clone(),delegate_type.clone(),1000));
+        assert_ok!(DID::add_delegate(Origin::signed(eth_public.clone()),eth_public.clone(),v_mantequilla_public.clone(),delegate_type.clone(),1000));
+        // Sign as Ethereum delegate
         let v_eth_sig = v_mantequilla_pair.sign(&eth_claim);
         let g_eth_sig = g_madera_pair.sign(&eth_claim);
 
@@ -646,7 +651,8 @@ fn the_never_ending_story() {
         // Mr. V.Mantequilla proof as Ethereum Co-founder
         assert_ok!(DID::valid_signer(&eth_public, &v_eth_sig, &eth_claim, &v_mantequilla_public));
 
-        // Dr. C.Derecha cannot prove being part of Ethereum launch.
+        // Dr. C.Derecha tries to cheat, but cannot prove being part of Ethereum launch.
+        assert_ok!(DID::add_delegate(Origin::signed(account_key("Derecha")),account_key("Derecha").clone(),eth_public.clone(),delegate_type.clone(),1000));
         assert_noop!(DID::valid_signer(&eth_public, &v_eth_sig, &eth_claim, &account_key("Derecha")),"invalid delegate");
 
 
