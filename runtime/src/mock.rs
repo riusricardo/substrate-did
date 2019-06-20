@@ -10,7 +10,7 @@ use runtime_io::TestExternalities;
 use runtime_primitives::{
     BuildStorage,
     traits::{BlakeTwo256, IdentityLookup},
-    testing::{Digest, DigestItem, Header}
+    testing::{Header}
 };
 use primitives::{H256, Blake2Hasher, sr25519, Pair};
 
@@ -26,12 +26,10 @@ impl system::Trait for Test {
     type BlockNumber = u64;
     type Hash = H256;
     type Hashing = BlakeTwo256;
-    type Digest = Digest;
     type AccountId = AccountId;
     type Lookup = IdentityLookup<Self::AccountId>;
     type Header = Header;
     type Event = ();
-    type Log = DigestItem;
 }
 
 impl balances::Trait for Test {
