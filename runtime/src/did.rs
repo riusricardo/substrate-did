@@ -407,7 +407,7 @@ impl<T: Trait> Module<T> {
 
         let now_timestamp = <timestamp::Module<T>>::now();
         let now_block_number = <system::Module<T>>::block_number();
-        let nonce = Self::nonce_of((identity.clone(), name.clone()));
+        let mut nonce = Self::nonce_of((identity.clone(), name.clone()));
         let validity = now_block_number + *valid_for;
 
         // Used for first time attribute creation
@@ -426,7 +426,7 @@ impl<T: Trait> Module<T> {
                     value: value.clone(),
                     validity,
                     creation: now_timestamp,
-                    nonce,
+                    nonce: nonce.clone(),
                 };
 
             // Basic fee system. The account that adds the attribute pays the fee.
@@ -435,8 +435,10 @@ impl<T: Trait> Module<T> {
             let fee: T::Balance = (size/1024u32).into();
             Self::pay_fee(&who, fee)?;
 
+            nonce = nonce.checked_add(1).ok_or("Overflow occurred")?; // prevent overflow panic
+
             <AttributeOf<T>>::insert((identity.clone(), id), new_attribute);
-            <AttributeNonce<T>>::mutate((identity.clone(), name.clone()), |n| *n += 1);
+            <AttributeNonce<T>>::mutate((identity.clone(), name.clone()), |n| *n = nonce);
             <UpdatedBy<T>>::insert(identity, (who, <system::Module<T>>::block_number(), <timestamp::Module<T>>::now()));
             
             Ok(())
