@@ -138,8 +138,15 @@ decl_module! {
                 let now_timestamp = <timestamp::Module<T>>::now();
                 let now_block_number = <system::Module<T>>::block_number();
                 
-                // Update storage to the new owner. Save the update time and block.
-                <OwnerOf<T>>::insert(&identity, &new_owner);
+                if <OwnerOf<T>>::exists(&identity){
+                    // Update to new owner.
+                    <OwnerOf<T>>::mutate(&identity, |o| *o = Some(new_owner.clone()));  
+                } else {
+                    // Add to new owner.
+                    <OwnerOf<T>>::insert(&identity, &new_owner);
+                }
+
+                // Save the update time and block.
                 <UpdatedBy<T>>::insert(&identity, (who.clone(), now_block_number.clone(), now_timestamp));
                 
                 Self::deposit_event(RawEvent::OwnerChanged(identity, who, new_owner, now_block_number));
