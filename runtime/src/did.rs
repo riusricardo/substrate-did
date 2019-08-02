@@ -74,7 +74,7 @@ use support::{decl_event, decl_module, decl_storage, ensure, StorageMap, Paramet
             dispatch::{Result, Vec},
             traits::{Currency, ExistenceRequirement, WithdrawReason}
 };
-use runtime_primitives::{traits::{Hash, Verify}};
+use sr_primitives::{traits::{Hash, Verify}};
 use parity_codec::{Encode, Decode};
 use system::{self, ensure_signed};
 use rstd::{prelude::*};

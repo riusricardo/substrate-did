@@ -5,13 +5,15 @@
 #![cfg(test)]
 
 use crate::{did, AccountId};
-use support::impl_outer_origin;
+use support::{impl_outer_origin, parameter_types};
 use runtime_io::TestExternalities;
-use runtime_primitives::{
-    BuildStorage,
+use sr_primitives::{
     traits::{BlakeTwo256, IdentityLookup},
+    weights::Weight,
+    Perbill,
     testing::{Header}
 };
+
 use primitives::{H256, Blake2Hasher, sr25519, Pair};
 
 impl_outer_origin! {
@@ -20,6 +22,19 @@ impl_outer_origin! {
 
 #[derive(Clone, Eq, PartialEq)]
 pub struct Test;
+parameter_types! {
+    pub const BlockHashCount: u64 = 250;
+    pub const MaximumBlockWeight: Weight = 1024;
+    pub const MaximumBlockLength: u32 = 2 * 1024;
+    pub const AvailableBlockRatio: Perbill = Perbill::from_percent(75);
+    pub const ExistentialDeposit: u64 = 0;
+    pub const TransferFee: u64 = 0;
+    pub const CreationFee: u64 = 0;
+    pub const TransactionBaseFee: u64 = 0;
+    pub const TransactionByteFee: u64 = 0;
+    pub const MinimumPeriod: u64 = 5;
+}
+
 impl system::Trait for Test {
     type Origin = Origin;
     type Index = u64;
@@ -29,7 +44,12 @@ impl system::Trait for Test {
     type AccountId = AccountId;
     type Lookup = IdentityLookup<Self::AccountId>;
     type Header = Header;
+    type WeightMultiplierUpdate = ();
     type Event = ();
+    type BlockHashCount = BlockHashCount;
+    type MaximumBlockWeight = MaximumBlockWeight;
+    type MaximumBlockLength = MaximumBlockLength;
+    type AvailableBlockRatio = AvailableBlockRatio;
 }
 
 impl balances::Trait for Test {
@@ -40,11 +60,18 @@ impl balances::Trait for Test {
     type TransactionPayment = ();
     type TransferPayment = ();
     type DustRemoval = ();
+    type ExistentialDeposit = ExistentialDeposit;
+    type TransferFee = TransferFee;
+    type CreationFee = CreationFee;
+    type TransactionBaseFee = TransactionBaseFee;
+    type TransactionByteFee = TransactionByteFee;
+    type WeightToFee = ();
 }
 
 impl timestamp::Trait for Test {
     type Moment = u64;
     type OnTimestampSet = ();
+    type MinimumPeriod = MinimumPeriod;
 }
 
 impl did::Trait for Test {
@@ -53,27 +80,22 @@ impl did::Trait for Test {
 }
 
 pub fn new_test_ext() -> TestExternalities<Blake2Hasher> {
-    let mut t = system::GenesisConfig::<Test>::default().build_storage().unwrap().0;
-    		t.extend(balances::GenesisConfig::<Test>{
-			transaction_base_fee: 1,
-			transaction_byte_fee: 0,
+    let mut t = system::GenesisConfig::default().build_storage::<Test>().unwrap();
+    balances::GenesisConfig::<Test>{
 			balances: vec![
-                            (account_key("Alice"), 100000),
-                            (account_key("Bob"), 100000),
-                            (account_key("Tom"), 100000),
-                            (account_key("Madera"), 10000000),
-                            (account_key("Mantequilla"), 10000000),
-                            (account_key("Roberto"), 10000000),
-                            (account_key("Derecha"), 1000),
-                            (account_key("Satoshi"), 999999999999999),
-                            (account_key("Nakamoto"), 999999999999999)
+                        (account_key("Alice"), 100000),
+                        (account_key("Bob"), 100000),
+                        (account_key("Tom"), 100000),
+                        (account_key("Madera"), 10000000),
+                        (account_key("Mantequilla"), 10000000),
+                        (account_key("Roberto"), 10000000),
+                        (account_key("Derecha"), 1000),
+                        (account_key("Satoshi"), 999999999999999),
+                        (account_key("Nakamoto"), 999999999999999)
                         ],
-			existential_deposit: 200,
-			transfer_fee: 0,
-			creation_fee: 0,
 			vesting: vec![],
-		}.build_storage().unwrap().0);
-    TestExternalities::new(t)
+		}.assimilate_storage(&mut t.0, &mut t.1).unwrap();
+	runtime_io::TestExternalities::new_with_children(t)
 }
 
 pub fn account_key(s: &str) -> AccountId {
