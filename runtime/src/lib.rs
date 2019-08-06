@@ -237,6 +237,11 @@ impl template::Trait for Runtime {
 	type Event = Event;
 }
 
+impl did::Trait for Runtime {
+	type Event = Event;
+	type Signature = AccountSignature;
+}
+
 construct_runtime!(
 	pub enum Runtime where
 		Block = Block,
@@ -252,6 +257,7 @@ construct_runtime!(
 		Sudo: sudo,
 		// Used for the module template in `./template.rs`
 		TemplateModule: template::{Module, Call, Storage, Event<T>},
+		DID: did::{Module, Call, Storage, Event<T>},
 	}
 );
 

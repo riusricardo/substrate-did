@@ -13,6 +13,7 @@ std = [
 	"parity-codec/std",
 	"client/std",
 	"contracts/std",
+	"did/std",
 	"rstd/std",
 	"runtime-io/std",
 	"support/std",
@@ -61,6 +62,12 @@ default_features = false
 git = 'https://github.com/paritytech/substrate.git'
 package = 'substrate-consensus-aura-primitives'
 rev = '311279449ee9d17b0cd8b2cb876326eebd3001e4'
+
+[dependencies.did]
+default_features = false
+git = 'https://github.com/riusricardo/did-module.git'
+package = 'srml-did'
+branch = 'master'
 
 [dependencies.executive]
 default_features = false
