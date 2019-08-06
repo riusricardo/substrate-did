@@ -1,6 +1,6 @@
 use primitives::{ed25519, sr25519, Pair};
-use identitychain_runtime::{
-	AccountId, GenesisConfig, AuraConfig, BalancesConfig,
+use identity_chain_runtime::{
+	AccountId, GenesisConfig, AuraConfig, BalancesConfig, ContractsConfig,
 	SudoConfig, IndicesConfig, SystemConfig, WASM_BINARY, AuraId
 };
 use substrate_service;
@@ -106,6 +106,10 @@ fn testnet_genesis(initial_authorities: Vec<AuraId>, endowed_accounts: Vec<Accou
 		}),
 		sudo: Some(SudoConfig {
 			key: root_key,
+		}),
+		contracts: Some(ContractsConfig {
+			gas_price: 1,
+			current_schedule: Default::default(),
 		}),
 	}
 }

@@ -2,18 +2,22 @@
 vergen = '3'
 
 [package]
-authors = ['Ricardo Rius <ricardo@rius.info>']
-build = 'build.rs'
-edition = '2018'
-name = 'identitychain'
-version = '2.0.0'
+name = "identity-chain"
+version = "2.0.0"
+authors = ["Anonymous"]
+build = "build.rs"
+edition = "2018"
+
+[[bin]]
+name = "identity-chain"
+path = "src/main.rs"
 
 [dependencies]
 derive_more = "0.14.0"
 futures = "0.1"
 ctrlc = { version = "3.0", features = ["termination"] }
 log = "0.4"
-identitychain-runtime = { path = "runtime" }
+identity-chain-runtime = { path = "runtime" }
 tokio = "0.1"
 exit-future = "0.1"
 parking_lot = "0.8.0"
@@ -69,7 +73,3 @@ rev = '311279449ee9d17b0cd8b2cb876326eebd3001e4'
 git = 'https://github.com/paritytech/substrate.git'
 package = 'substrate-basic-authorship'
 rev = '311279449ee9d17b0cd8b2cb876326eebd3001e4'
-
-[[bin]]
-name = 'identitychain'
-path = 'src/main.rs'

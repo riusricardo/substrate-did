@@ -1,14 +1,18 @@
 [package]
-authors = ['Ricardo Rius <ricardo@rius.info>']
-edition = '2018'
-name = 'identitychain-runtime'
-version = '2.0.0'
+name = "identity-chain-runtime"
+version = "2.0.0"
+authors = ["Ricardo Rius"]
+edition = "2018"
 
 [features]
 default = ["std"]
+no_std = [
+	"contracts/core",
+]
 std = [
 	"parity-codec/std",
 	"client/std",
+	"contracts/std",
 	"rstd/std",
 	"runtime-io/std",
 	"support/std",
@@ -27,7 +31,6 @@ std = [
 	"consensus-aura/std",
 	"offchain-primitives/std",
 ]
-no_std = []
 
 [dependencies.aura]
 default_features = false
@@ -45,6 +48,12 @@ rev = '311279449ee9d17b0cd8b2cb876326eebd3001e4'
 default_features = false
 git = 'https://github.com/paritytech/substrate.git'
 package = 'substrate-client'
+rev = '311279449ee9d17b0cd8b2cb876326eebd3001e4'
+
+[dependencies.contracts]
+default_features = false
+git = 'https://github.com/paritytech/substrate.git'
+package = 'srml-contracts'
 rev = '311279449ee9d17b0cd8b2cb876326eebd3001e4'
 
 [dependencies.consensus-aura]

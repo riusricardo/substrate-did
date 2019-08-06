@@ -17,6 +17,7 @@ use client::{
 	block_builder::api::{CheckInherentsResult, InherentData, self as block_builder_api},
 	runtime_api, impl_runtime_apis
 };
+
 use version::RuntimeVersion;
 #[cfg(feature = "std")]
 use version::NativeVersion;
@@ -26,6 +27,7 @@ use version::NativeVersion;
 pub use sr_primitives::BuildStorage;
 pub use timestamp::Call as TimestampCall;
 pub use balances::Call as BalancesCall;
+pub use contracts::Gas;
 pub use sr_primitives::{Permill, Perbill};
 pub use support::{StorageValue, construct_runtime, parameter_types};
 
@@ -53,9 +55,8 @@ pub type Nonce = u64;
 /// Balance type for the node.
 pub type Balance = u128;
 
-pub mod did;
-mod tests;
-mod mock;
+/// Used for the module template in `./template.rs`
+mod template;
 
 /// Opaque types. These are used by the CLI to instantiate machinery that don't need to know
 /// the specifics of the runtime. They can then be made to be agnostic over specific formats
@@ -78,13 +79,18 @@ pub mod opaque {
 
 /// This runtime version.
 pub const VERSION: RuntimeVersion = RuntimeVersion {
-	spec_name: create_runtime_str!("identitychain"),
-	impl_name: create_runtime_str!("identitychain"),
+	spec_name: create_runtime_str!("identity-chain"),
+	impl_name: create_runtime_str!("identity-chain"),
 	authoring_version: 3,
 	spec_version: 4,
 	impl_version: 4,
 	apis: RUNTIME_API_VERSIONS,
 };
+
+/// Constant values used within the runtime.
+pub const MILLICENTS: Balance = 1_000_000_000;
+pub const CENTS: Balance = 1_000 * MILLICENTS;    // assume this is worth about a cent.
+pub const DOLLARS: Balance = 100 * CENTS;
 
 /// The version infromation used to identify this runtime when compiled natively.
 #[cfg(feature = "std")]
@@ -166,13 +172,18 @@ parameter_types! {
 	pub const CreationFee: u128 = 0;
 	pub const TransactionBaseFee: u128 = 0;
 	pub const TransactionByteFee: u128 = 1;
+	pub const ContractTransferFee: Balance = 1 * CENTS;
+	pub const ContractCreationFee: Balance = 1 * CENTS;
+	pub const ContractTransactionBaseFee: Balance = 1 * CENTS;
+	pub const ContractTransactionByteFee: Balance = 10 * MILLICENTS;
+	pub const ContractFee: Balance = 1 * CENTS;
 }
 
 impl balances::Trait for Runtime {
 	/// The type for recording an account's balance.
 	type Balance = Balance;
 	/// What to do if an account's free balance gets zeroed.
-	type OnFreeBalanceZero = ();
+	type OnFreeBalanceZero = (Contracts);
 	/// What to do if a new account is created.
 	type OnNewAccount = Indices;
 	/// The ubiquitous event type.
@@ -189,15 +200,41 @@ impl balances::Trait for Runtime {
 	type WeightToFee = ConvertInto;
 }
 
+impl contracts::Trait for Runtime {
+	type Currency = Balances;
+	type Call = Call;
+	type Event = Event;
+	type DetermineContractAddress = contracts::SimpleAddressDeterminator<Runtime>;
+	type ComputeDispatchFee = contracts::DefaultDispatchFeeComputor<Runtime>;
+	type TrieIdGenerator = contracts::TrieIdFromParentCounter<Runtime>;
+	type GasPayment = ();
+	type SignedClaimHandicap = contracts::DefaultSignedClaimHandicap;
+	type TombstoneDeposit = contracts::DefaultTombstoneDeposit;
+	type StorageSizeOffset = contracts::DefaultStorageSizeOffset;
+	type RentByteFee = contracts::DefaultRentByteFee;
+	type RentDepositOffset = contracts::DefaultRentDepositOffset;
+	type SurchargeReward = contracts::DefaultSurchargeReward;
+	type TransferFee = ContractTransferFee;
+	type CreationFee = ContractCreationFee;
+	type TransactionBaseFee = ContractTransactionBaseFee;
+	type TransactionByteFee = ContractTransactionByteFee;
+	type ContractFee = ContractFee;
+	type CallBaseFee = contracts::DefaultCallBaseFee;
+	type CreateBaseFee = contracts::DefaultCreateBaseFee;
+	type MaxDepth = contracts::DefaultMaxDepth;
+	type MaxValueSize = contracts::DefaultMaxValueSize;
+	type BlockGasLimit = contracts::DefaultBlockGasLimit;
+}
+
 impl sudo::Trait for Runtime {
 	/// The ubiquitous event type.
 	type Event = Event;
 	type Proposal = Call;
 }
 
-impl did::Trait for Runtime {
+/// Used for the module template in `./template.rs`
+impl template::Trait for Runtime {
 	type Event = Event;
-	type Signature = AccountSignature;
 }
 
 construct_runtime!(
@@ -211,8 +248,10 @@ construct_runtime!(
 		Aura: aura::{Module, Config<T>, Inherent(Timestamp)},
 		Indices: indices::{default, Config<T>},
 		Balances: balances,
+		Contracts: contracts,
 		Sudo: sudo,
-		DID: did::{Module, Call, Storage, Event<T>},
+		// Used for the module template in `./template.rs`
+		TemplateModule: template::{Module, Call, Storage, Event<T>},
 	}
 );
 

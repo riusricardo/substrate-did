@@ -11,12 +11,12 @@ pub use substrate_cli::{VersionInfo, IntoExit, error};
 
 fn main() {
 	let version = VersionInfo {
-		name: "DID Module",
+		name: "Identity Node",
 		commit: env!("VERGEN_SHA_SHORT"),
 		version: env!("CARGO_PKG_VERSION"),
-		executable_name: "identitychain",
-		author: "Ricardo",
-		description: "identitychain",
+		executable_name: "identity-chain",
+		author: "Anonymous",
+		description: "Experimental DID Node",
 		support_url: "support.anonymous.an",
 	};
 
