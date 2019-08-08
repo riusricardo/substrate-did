@@ -169,7 +169,8 @@ cargo build --release
 Execute module tests:
 
 ```bash
-cargo test -p identitychain-runtime
+cargo test -p identity-chain-runtime
+cargo test -p srml-did
 ```
 # Run
 
