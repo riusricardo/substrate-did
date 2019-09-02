@@ -1,9 +1,8 @@
-//! Substrate Node Template CLI library.
-
 #![warn(missing_docs)]
 #![warn(unused_extern_crates)]
 
 mod chain_spec;
+#[macro_use]
 mod service;
 mod cli;
 
@@ -21,7 +20,7 @@ fn main() {
 	};
 
 	if let Err(e) = cli::run(::std::env::args(), cli::Exit, version) {
-		eprintln!("Error starting the node: {}\n\n{:?}", e, e);
+		eprintln!("Fatal error: {}\n\n{:?}", e, e);
 		std::process::exit(1)
 	}
 }
